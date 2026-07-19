@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>競馬AI ミステリー予想（閲覧）</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand" id="brandName">競馬AI ミステリー予想</div>
+    <p class="tagline">本日の予想サマリー（閲覧専用）</p>
+    <p class="updated" id="updatedAt">更新を読み込み中…</p>
+  </header>
+
+  <section class="subscribe card">
+    <h2>配信を受け取る</h2>
+    <p class="hint">発走直前予想などの通知はこちらから登録できます。</p>
+    <div class="cta-row">
+      <a class="btn btn-line" id="lineCta" href="#" target="_blank" rel="noopener">LINE公式を友だち追加</a>
+      <a class="btn btn-discord" id="discordCta" href="#" target="_blank" rel="noopener">Discord配信に参加</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>本日の優先候補（Top5）</h2>
+    <ol id="top5List" class="top5"></ol>
+  </section>
+
+  <section class="card">
+    <h2>会場マトリクス</h2>
+    <div id="venueTabs" class="tabs" role="tablist"></div>
+    <div id="matrixWrap" class="table-wrap"></div>
+    <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+    <div id="jumpButtons" class="jump-row"></div>
+  </section>
+
+  <section class="card" id="raceDetailCard">
+    <h2>レース要約</h2>
+    <div id="raceDetail" class="race-detail">
+      <p class="hint">マトリクスの行またはジャンプボタンでレースを選ぶと表示されます。</p>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>本ページは閲覧専用です。予想の自動実行やオッズ取得は行いません。</p>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
