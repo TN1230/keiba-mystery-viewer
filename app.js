@@ -102,7 +102,7 @@
     const labels = {
       race: "Race",
       dev: "偏差",
-      sui: "推",
+      sui: "ホームズ推",
       holmes_index: "ホームズ指数",
       ワ: "ワトソン",
       アイ: "アイリーン",
@@ -179,7 +179,7 @@
       <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(r.holmes_index)}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
-      <p class="meta">推奨ロジック: ${escapeHtml(r.best_logic_label || "-")}</p>
+      <p class="meta">ホームズ推奨: ${escapeHtml(r.best_logic_label || "-")}</p>
       <div class="marks">
     `;
     for (const [k, label] of [["ワ", "ワトソン"], ["アイ", "アイリーン"], ["モ", "モーリアティ"], ["ハ/ホプ", "ハ/ホプ"]]) {
