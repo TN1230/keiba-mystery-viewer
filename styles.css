@@ -67,6 +67,35 @@ body {
   color: var(--accent);
 }
 
+.mobile-only { display: none; }
+
+.acc-toolbar {
+  margin: 0 var(--pad) 0.75rem;
+  max-width: 1100px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.acc-tool-btn {
+  min-height: 2.4rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid rgba(11, 61, 46, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.9);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.acc-toggle {
+  display: none;
+}
+.acc-body {
+  display: block;
+}
+
 .hint { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
 
 .logic-blurbs {
@@ -345,6 +374,63 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 
 @media (max-width: 720px) {
+  .mobile-only { display: flex; }
+  .acc-toolbar[hidden] { display: none !important; }
+
+  .acc {
+    padding-top: 0.25rem;
+    padding-bottom: 0.35rem;
+  }
+  .acc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: calc(100% + 2 * var(--pad));
+    margin: 0 calc(var(--pad) * -1);
+    padding: 0.75rem var(--pad);
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+    min-height: var(--touch);
+  }
+  .acc-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .acc-hint {
+    flex: 1;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .acc-chevron {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-right: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    flex: 0 0 auto;
+  }
+  .acc.is-open .acc-chevron {
+    transform: rotate(-135deg);
+    margin-top: 0.25rem;
+  }
+  .acc.is-closed .acc-body {
+    display: none;
+  }
+  .acc.is-open .acc-body {
+    display: block;
+    padding: 0 0 0.65rem;
+    border-top: 1px solid rgba(11, 61, 46, 0.08);
+  }
+
   .cta-row { flex-direction: column; }
   .btn { width: 100%; }
 
@@ -367,11 +453,37 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   }
 }
 
+@media (min-width: 721px) {
+  .acc-toggle {
+    display: block;
+    width: 100%;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: default;
+    pointer-events: none;
+  }
+  .acc-title {
+    font-size: clamp(1.05rem, 3.8vw, 1.15rem);
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .acc-hint,
+  .acc-chevron {
+    display: none;
+  }
+}
+
 @media (max-width: 380px) {
   .matrix-card-grid {
     grid-template-columns: 1fr;
   }
   .jump-row {
     grid-template-columns: repeat(3, 1fr);
+  }
+  .acc-hint {
+    display: none;
   }
 }
