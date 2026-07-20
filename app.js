@@ -9,7 +9,6 @@
   const $ = (id) => document.getElementById(id);
 
   function setCtas() {
-    const line = $("lineCta");
     const disc = $("discordCta");
     if (cfg.BRAND_NAME) {
       const brand = $("brandName");
@@ -19,12 +18,7 @@
         else brand.textContent = cfg.BRAND_NAME;
       }
     }
-    if (cfg.LINE_FRIEND_URL && !String(cfg.LINE_FRIEND_URL).includes("YOUR_")) {
-      line.href = cfg.LINE_FRIEND_URL;
-    } else {
-      line.setAttribute("aria-disabled", "true");
-      line.title = "config.js の LINE_FRIEND_URL を設定してください";
-    }
+    if (!disc) return;
     if (cfg.DISCORD_INVITE_URL && !String(cfg.DISCORD_INVITE_URL).includes("YOUR_")) {
       disc.href = cfg.DISCORD_INVITE_URL;
     } else {
