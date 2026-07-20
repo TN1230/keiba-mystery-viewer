@@ -17,6 +17,12 @@
       <p class="nav-links">
         <a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ</a>
       </p>
+      <section class="sidebar-jumps pc-only" id="sidebarJumps" aria-labelledby="sidebarJumpsTitle">
+        <h2 class="sidebar-jumps-title" id="sidebarJumpsTitle">レースジャンプ</h2>
+        <p class="sidebar-jumps-venue" id="sidebarJumpVenue">会場を選択すると表示されます</p>
+        <p class="hint jump-legend sidebar-jump-legend">青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+        <div id="jumpButtonsSidebar" class="jump-row sidebar-jump-row"></div>
+      </section>
       <section class="sidebar-subscribe" aria-labelledby="subscribeTitle">
         <h2 class="sidebar-subscribe-title" id="subscribeTitle">配信を受け取る</h2>
         <p class="sidebar-subscribe-hint">発走直前予想などの通知はこちらから登録できます。</p>
@@ -74,8 +80,10 @@
         </button>
         <div class="acc-body">
           <div id="venueTabs" class="tabs" role="tablist"></div>
-          <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
-          <div id="jumpButtons" class="jump-row"></div>
+          <div class="jump-block mobile-only" id="jumpBlockMain">
+            <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+            <div id="jumpButtons" class="jump-row"></div>
+          </div>
           <div id="matrixWrap"></div>
         </div>
       </section>

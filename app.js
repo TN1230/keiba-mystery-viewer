@@ -214,22 +214,30 @@
   }
 
   function renderJumps() {
-    const box = $("jumpButtons");
-    box.innerHTML = "";
+    const boxes = [$("jumpButtons"), $("jumpButtonsSidebar")].filter(Boolean);
+    const venueEl = $("sidebarJumpVenue");
     const v = currentVenue();
-    if (!v) return;
-    for (const r of v.races || []) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = jumpClass(r.holmes_index_rank);
-      const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
-      b.textContent = `${rn}R`;
-      const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
-        ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
-        : `${r.place} ${rn}R`;
-      b.title = tip;
-      b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
-      box.appendChild(b);
+    if (venueEl) {
+      venueEl.textContent = v
+        ? `${v.place}（${(v.races || []).length}レース）`
+        : "会場を選択すると表示されます";
+    }
+    for (const box of boxes) {
+      box.innerHTML = "";
+      if (!v) continue;
+      for (const r of v.races || []) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = jumpClass(r.holmes_index_rank);
+        const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
+        b.textContent = `${rn}R`;
+        const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
+          ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
+          : `${r.place} ${rn}R`;
+        b.title = tip;
+        b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
+        box.appendChild(b);
+      }
     }
   }
 
