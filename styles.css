@@ -161,6 +161,43 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   color: var(--muted);
   font-size: 0.85rem;
 }
+.site-footer a,
+.nav-links a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.site-footer a:hover,
+.nav-links a:hover {
+  text-decoration: underline;
+}
+.nav-links {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+
+.help-dl {
+  margin: 0;
+}
+.help-dl dt {
+  margin-top: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.help-dl dt:first-child {
+  margin-top: 0;
+}
+.help-dl dd {
+  margin: 0.25rem 0 0;
+  color: var(--ink);
+}
+.help-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.help-list li {
+  margin: 0.4rem 0;
+}
 
 .error {
   color: #9b1c1c;
