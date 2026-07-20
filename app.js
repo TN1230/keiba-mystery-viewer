@@ -109,21 +109,36 @@
       モ: "モーリアティ",
       "ハ/ホプ": "ハンター/ホプキンス",
     };
-    let html = "<table class='matrix'><thead><tr>";
-    for (const c of cols) html += `<th>${labels[c] || c}</th>`;
-    html += "</tr></thead><tbody>";
+    let table = "<div class='matrix-desktop'><div class='table-wrap'><table class='matrix'><thead><tr>";
+    for (const c of cols) table += `<th>${labels[c] || c}</th>`;
+    table += "</tr></thead><tbody>";
+    let cards = "<div class='matrix-mobile'>";
     for (const row of v.matrix) {
       const sel = String(row.race_id) === String(state.raceId) ? " selected" : "";
-      html += `<tr class="${sel}" data-rid="${row.race_id}">`;
+      table += `<tr class="${sel}" data-rid="${row.race_id}">`;
       for (const c of cols) {
-        html += `<td>${escapeHtml(row[c] ?? "-")}</td>`;
+        table += `<td>${escapeHtml(row[c] ?? "-")}</td>`;
       }
-      html += "</tr>";
+      table += "</tr>";
+      cards += `
+        <button type="button" class="matrix-card${sel}" data-rid="${escapeAttr(row.race_id)}">
+          <p class="matrix-card-title">${escapeHtml(row.race || "-")}</p>
+          <div class="matrix-card-grid">
+            <div><span>偏差</span><strong>${escapeHtml(row.dev ?? "-")}</strong></div>
+            <div><span>ホームズ推</span><strong>${escapeHtml(row.sui ?? "-")}</strong></div>
+            <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
+            <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
+            <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
+            <div><span>モーリアティ</span><strong>${escapeHtml(row["モ"] ?? "-")}</strong></div>
+            <div><span>ハンター/ホプキンス</span><strong>${escapeHtml(row["ハ/ホプ"] ?? "-")}</strong></div>
+          </div>
+        </button>`;
     }
-    html += "</tbody></table>";
-    wrap.innerHTML = html;
-    wrap.querySelectorAll("tr[data-rid]").forEach((tr) => {
-      tr.addEventListener("click", () => selectRace(tr.getAttribute("data-rid"), state.place));
+    table += "</tbody></table></div></div>";
+    cards += "</div>";
+    wrap.innerHTML = table + cards;
+    wrap.querySelectorAll("[data-rid]").forEach((el) => {
+      el.addEventListener("click", () => selectRace(el.getAttribute("data-rid"), state.place));
     });
   }
 
@@ -182,7 +197,7 @@
       <p class="meta">ホームズ推奨: ${escapeHtml(r.best_logic_label || "-")}</p>
       <div class="marks">
     `;
-    for (const [k, label] of [["ワ", "ワトソン"], ["アイ", "アイリーン"], ["モ", "モーリアティ"], ["ハ/ホプ", "ハ/ホプ"]]) {
+    for (const [k, label] of [["ワ", "ワトソン"], ["アイ", "アイリーン"], ["モ", "モーリアティ"], ["ハ/ホプ", "ハンター/ホプキンス"]]) {
       html += `<div class="mark-box"><strong>${label}</strong>${escapeHtml(cells[k] || "-")}<br/><span>${escapeHtml(marks[k] || "-")}</span></div>`;
     }
     html += "</div><div class='pdf-links'>";
