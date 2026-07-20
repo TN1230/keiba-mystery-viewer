@@ -129,6 +129,17 @@ body {
   line-height: 1.45;
   text-align: left;
 }
+.update-timing {
+  margin: 0.55rem 0 0;
+  padding: 0.55rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: left;
+  background: rgba(11, 61, 46, 0.05);
+  border: 1px solid rgba(11, 61, 46, 0.1);
+  border-radius: 6px;
+}
 .nav-links {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
@@ -241,6 +252,10 @@ body {
   .site-sidebar .update-note {
     margin-top: 0.45rem;
     font-size: 0.76rem;
+  }
+  .site-sidebar .update-timing {
+    margin-top: 0.55rem;
+    font-size: 0.74rem;
   }
   .site-sidebar .nav-links {
     margin-top: 1.15rem;
