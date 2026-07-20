@@ -176,6 +176,7 @@
     renderMatrix();
     renderJumps();
     renderDetail();
+    openAccordion("race");
     $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -249,7 +250,103 @@
     }
   }
 
+  const ACC_STORAGE_KEY = "pv_acc_state_v1";
+  const ACC_MQ = window.matchMedia("(max-width: 720px)");
+
+  function isMobileAcc() {
+    return ACC_MQ.matches;
+  }
+
+  function readAccPrefs() {
+    try {
+      return JSON.parse(sessionStorage.getItem(ACC_STORAGE_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeAccPrefs(prefs) {
+    try {
+      sessionStorage.setItem(ACC_STORAGE_KEY, JSON.stringify(prefs));
+    } catch (_) {}
+  }
+
+  function setAccordionOpen(section, open, persist) {
+    if (!section) return;
+    section.classList.toggle("is-open", open);
+    section.classList.toggle("is-closed", !open);
+    const btn = section.querySelector(".acc-toggle");
+    if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (persist && isMobileAcc()) {
+      const key = section.getAttribute("data-acc");
+      if (!key) return;
+      const prefs = readAccPrefs();
+      prefs[key] = open;
+      writeAccPrefs(prefs);
+    }
+  }
+
+  function openAccordion(key) {
+    if (!isMobileAcc()) return;
+    const section = document.querySelector(`.acc[data-acc="${key}"]`);
+    setAccordionOpen(section, true, true);
+  }
+
+  function applyAccordionDefaults() {
+    const toolbar = $("accToolbar");
+    const prefs = readAccPrefs();
+    document.querySelectorAll(".acc[data-acc]").forEach((section) => {
+      const key = section.getAttribute("data-acc");
+      let open;
+      if (!isMobileAcc()) {
+        open = true;
+      } else if (Object.prototype.hasOwnProperty.call(prefs, key)) {
+        open = !!prefs[key];
+      } else {
+        open = section.getAttribute("data-default") !== "closed";
+      }
+      setAccordionOpen(section, open, false);
+    });
+    if (toolbar) toolbar.hidden = !isMobileAcc();
+  }
+
+  function initAccordion() {
+    document.querySelectorAll(".acc[data-acc]").forEach((section) => {
+      const btn = section.querySelector(".acc-toggle");
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        if (!isMobileAcc()) return;
+        const next = !section.classList.contains("is-open");
+        setAccordionOpen(section, next, true);
+      });
+    });
+    const openAll = $("accOpenAll");
+    const closeSecondary = $("accCloseSecondary");
+    if (openAll) {
+      openAll.addEventListener("click", () => {
+        document.querySelectorAll(".acc[data-acc]").forEach((section) => {
+          setAccordionOpen(section, true, true);
+        });
+      });
+    }
+    if (closeSecondary) {
+      closeSecondary.addEventListener("click", () => {
+        document.querySelectorAll('.acc[data-default="closed"]').forEach((section) => {
+          setAccordionOpen(section, false, true);
+        });
+        document.querySelectorAll('.acc[data-default="open"]').forEach((section) => {
+          setAccordionOpen(section, true, true);
+        });
+      });
+    }
+    applyAccordionDefaults();
+    const onChange = () => applyAccordionDefaults();
+    if (ACC_MQ.addEventListener) ACC_MQ.addEventListener("change", onChange);
+    else if (ACC_MQ.addListener) ACC_MQ.addListener(onChange);
+  }
+
   setCtas();
+  initAccordion();
   loadSnapshot();
   const poll = Number(cfg.POLL_INTERVAL_MS) || 60000;
   if (poll > 0) setInterval(loadSnapshot, poll);
