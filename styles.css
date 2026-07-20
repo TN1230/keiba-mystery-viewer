@@ -223,7 +223,11 @@ body {
     margin-top: 1.15rem;
   }
   .site-sidebar .sidebar-jumps {
+    display: block;
     margin-top: 1.25rem;
+  }
+  .pc-only {
+    display: block !important;
   }
   .site-main {
     height: 100%;
@@ -243,23 +247,29 @@ body {
 .mobile-only { display: none; }
 .pc-only { display: block; }
 
+/* レースジャンプは PC サイドバー専用（モバイルはマトリクス内） */
 .sidebar-jumps {
+  display: none;
   margin-top: 1.15rem;
   padding-top: 1rem;
   border-top: 1px solid rgba(11, 61, 46, 0.12);
   text-align: left;
 }
 .sidebar-jumps-title {
-  margin: 0;
+  margin: 0 0 0.55rem;
   font-size: 1rem;
   font-weight: 700;
   color: var(--accent);
 }
-.sidebar-jumps-venue {
-  margin: 0.35rem 0 0.55rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--ink);
+.sidebar-venue-tabs {
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.sidebar-venue-tabs .tab {
+  min-height: 2.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.88rem;
 }
 .sidebar-jump-legend {
   margin: 0 0 0.55rem;
@@ -273,6 +283,11 @@ body {
   min-height: 2.4rem;
   font-size: 0.88rem;
   padding: 0.35rem 0.15rem;
+}
+.jump.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  font-weight: 800;
 }
 
 .acc-toolbar {
@@ -630,7 +645,10 @@ table.shutuba .mark-m { color: #7b1fa2; }
   .pc-only {
     display: none !important;
   }
-  .jump-block.mobile-only {
+  .sidebar-jumps {
+    display: none !important;
+  }
+  .matrix-nav.mobile-only {
     display: block;
   }
   .acc-toolbar.mobile-only {

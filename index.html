@@ -17,9 +17,9 @@
       <p class="nav-links">
         <a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ</a>
       </p>
-      <section class="sidebar-jumps pc-only" id="sidebarJumps" aria-labelledby="sidebarJumpsTitle">
+      <section class="sidebar-jumps" id="sidebarJumps" aria-labelledby="sidebarJumpsTitle">
         <h2 class="sidebar-jumps-title" id="sidebarJumpsTitle">レースジャンプ</h2>
-        <p class="sidebar-jumps-venue" id="sidebarJumpVenue">会場を選択すると表示されます</p>
+        <div id="venueTabsSidebar" class="tabs sidebar-venue-tabs" role="tablist" aria-label="会場"></div>
         <p class="hint jump-legend sidebar-jump-legend">青=ホームズ指数1〜5位 / 緑=6〜10位</p>
         <div id="jumpButtonsSidebar" class="jump-row sidebar-jump-row"></div>
       </section>
@@ -79,10 +79,12 @@
           <span class="acc-chevron" aria-hidden="true"></span>
         </button>
         <div class="acc-body">
-          <div id="venueTabs" class="tabs" role="tablist"></div>
-          <div class="jump-block mobile-only" id="jumpBlockMain">
-            <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
-            <div id="jumpButtons" class="jump-row"></div>
+          <div class="matrix-nav mobile-only" id="matrixNavMobile">
+            <div id="venueTabs" class="tabs" role="tablist" aria-label="会場"></div>
+            <div class="jump-block" id="jumpBlockMain">
+              <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+              <div id="jumpButtons" class="jump-row"></div>
+            </div>
           </div>
           <div id="matrixWrap"></div>
         </div>

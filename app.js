@@ -68,12 +68,12 @@
     }
   }
 
-  function renderTabs() {
-    const tabs = $("venueTabs");
-    tabs.innerHTML = "";
+  function fillVenueTabs(container) {
+    if (!container) return;
+    container.innerHTML = "";
     const list = venues();
     if (!list.length) {
-      tabs.innerHTML = "<span class='hint'>会場データがありません</span>";
+      container.innerHTML = "<span class='hint'>会場データがありません</span>";
       return;
     }
     if (!state.place || !list.some((v) => v.place === state.place)) {
@@ -84,14 +84,20 @@
       b.type = "button";
       b.className = "tab" + (v.place === state.place ? " active" : "");
       b.textContent = v.place;
+      b.setAttribute("aria-pressed", v.place === state.place ? "true" : "false");
       b.addEventListener("click", () => {
         state.place = v.place;
         renderTabs();
         renderMatrix();
         renderJumps();
       });
-      tabs.appendChild(b);
+      container.appendChild(b);
     }
+  }
+
+  function renderTabs() {
+    fillVenueTabs($("venueTabs"));
+    fillVenueTabs($("venueTabsSidebar"));
   }
 
   function currentVenue() {
@@ -215,22 +221,18 @@
 
   function renderJumps() {
     const boxes = [$("jumpButtons"), $("jumpButtonsSidebar")].filter(Boolean);
-    const venueEl = $("sidebarJumpVenue");
     const v = currentVenue();
-    if (venueEl) {
-      venueEl.textContent = v
-        ? `${v.place}（${(v.races || []).length}レース）`
-        : "会場を選択すると表示されます";
-    }
     for (const box of boxes) {
       box.innerHTML = "";
       if (!v) continue;
       for (const r of v.races || []) {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = jumpClass(r.holmes_index_rank);
+        const selected = String(r.race_id) === String(state.raceId);
+        b.className = jumpClass(r.holmes_index_rank) + (selected ? " is-selected" : "");
         const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
         b.textContent = `${rn}R`;
+        b.setAttribute("aria-pressed", selected ? "true" : "false");
         const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
           ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
           : `${r.place} ${rn}R`;
