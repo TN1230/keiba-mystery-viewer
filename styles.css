@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f3f0e8;
   --ink: #1a1a1a;
   --muted: #5c5c5c;
@@ -673,6 +673,27 @@ table.shutuba .mark-m { color: #7b1fa2; }
 }
 .help-list li { margin: 0.4rem 0; }
 
+/* ヘルプページ: PCでも中央寄せ */
+.help-page {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 1rem;
+}
+.help-page .site-header {
+  padding: 1.5rem var(--pad) 0.75rem;
+  text-align: center;
+}
+.help-page .card {
+  margin-left: auto;
+  margin-right: auto;
+}
+.help-page .site-footer {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .error {
   color: #9b1c1c;
   padding: 0.75rem;
@@ -873,3 +894,4 @@ table.shutuba .mark-m { color: #7b1fa2; }
     display: none;
   }
 }
+
