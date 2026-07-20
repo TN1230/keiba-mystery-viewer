@@ -17,28 +17,21 @@
       <p class="nav-links">
         <a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ</a>
       </p>
+      <section class="sidebar-subscribe" aria-labelledby="subscribeTitle">
+        <h2 class="sidebar-subscribe-title" id="subscribeTitle">配信を受け取る</h2>
+        <p class="sidebar-subscribe-hint">発走直前予想などの通知はこちらから登録できます。</p>
+        <div class="cta-row sidebar-cta">
+          <a class="btn btn-line" id="lineCta" href="#" target="_blank" rel="noopener">LINE公式を友だち追加</a>
+          <a class="btn btn-discord" id="discordCta" href="#" target="_blank" rel="noopener">Discord配信に参加</a>
+        </div>
+      </section>
     </aside>
 
     <div class="site-main">
       <div class="acc-toolbar mobile-only" id="accToolbar" hidden>
         <button type="button" class="acc-tool-btn" id="accOpenAll">すべて開く</button>
-        <button type="button" class="acc-tool-btn" id="accCloseSecondary">説明・登録を閉じる</button>
+        <button type="button" class="acc-tool-btn" id="accCloseSecondary">説明を閉じる</button>
       </div>
-
-      <section class="card acc" data-acc="subscribe" data-default="closed">
-        <button type="button" class="acc-toggle" aria-expanded="false">
-          <span class="acc-title">配信を受け取る</span>
-          <span class="acc-hint">LINE / Discord</span>
-          <span class="acc-chevron" aria-hidden="true"></span>
-        </button>
-        <div class="acc-body">
-          <p class="hint">発走直前予想などの通知はこちらから登録できます。</p>
-          <div class="cta-row">
-            <a class="btn btn-line" id="lineCta" href="#" target="_blank" rel="noopener">LINE公式を友だち追加</a>
-            <a class="btn btn-discord" id="discordCta" href="#" target="_blank" rel="noopener">Discord配信に参加</a>
-          </div>
-        </div>
-      </section>
 
       <section class="card logic-cast acc acc-pc" data-acc="logic" data-default="closed">
         <button type="button" class="acc-toggle" aria-expanded="false">
