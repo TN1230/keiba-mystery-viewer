@@ -350,12 +350,29 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  function formatUpdatedAtLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    // ISO / "YYYY-MM-DD HH:MM:SS" / "YYYY-MM-DDTHH:MM:SS(+TZ)"
+    const m = s.match(
+      /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
+    );
+    if (m) {
+      const datePart = m[1];
+      const timePart = m[2] || "";
+      if (timePart) return `📅${datePart}　⏰${timePart}`;
+      return `📅${datePart}`;
+    }
+    return s;
+  }
+
   function applyData(data, { flash = false } = {}) {
     const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
     const el = $("updatedAt");
-    const text = data.updated_at
-      ? `最終更新: ${data.updated_at}（開催日 ${data.schedule_date || "-"}）`
+    const stamped = formatUpdatedAtLabel(data.updated_at);
+    const text = stamped
+      ? `最終更新: ${stamped}（開催日 ${data.schedule_date || "-"}）`
       : "更新時刻不明";
     el.textContent = text;
     if (flash && prevUpdated && data.updated_at && prevUpdated !== data.updated_at) {
