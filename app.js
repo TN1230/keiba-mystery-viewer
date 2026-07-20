@@ -105,7 +105,7 @@
       wrap.innerHTML = "<p class='hint'>マトリクスなし</p>";
       return;
     }
-    const cols = ["race", "dev", "sui", "holmes_index", "ワ", "アイ", "モ", "ハ/ホプ"];
+    const cols = ["race", "dev", "sui", "holmes_index", "ワ", "アイ", "第3探偵"];
     const labels = {
       race: "Race",
       dev: "偏差",
@@ -113,8 +113,7 @@
       holmes_index: "ホームズ指数",
       ワ: "ワトソン",
       アイ: "アイリーン",
-      モ: "モーリアティ（登場）",
-      "ハ/ホプ": "ハンター/ホプキンス（登場）",
+      第3探偵: "第3探偵",
     };
     let table = "<div class='matrix-desktop'><div class='table-wrap'><table class='matrix'><thead><tr>";
     for (const c of cols) table += `<th>${labels[c] || c}</th>`;
@@ -136,8 +135,7 @@
             <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
             <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
             <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
-            <div><span>モーリアティ</span><strong>${escapeHtml(row["モ"] ?? "-")}</strong></div>
-            <div><span>特化（ハ/ホプ）</span><strong>${escapeHtml(row["ハ/ホプ"] ?? "-")}</strong></div>
+            <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(row["第3探偵"] ?? "-")}</strong></div>
           </div>
         </button>`;
     }
