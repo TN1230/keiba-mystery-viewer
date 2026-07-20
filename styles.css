@@ -47,7 +47,8 @@ body {
   overflow-wrap: anywhere;
 }
 .tagline { margin: 0.35rem 0 0; color: var(--muted); font-size: clamp(0.88rem, 3.2vw, 1rem); }
-.updated { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); }
+.updated { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); transition: color 0.3s ease; }
+.updated.just-updated { color: var(--accent); font-weight: 700; }
 
 .card {
   margin: 0 var(--pad) 1rem;
