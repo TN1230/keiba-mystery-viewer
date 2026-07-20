@@ -53,12 +53,23 @@ body {
   }
 }
 
-.site-header {
-  padding: 1.5rem var(--pad) 0.85rem;
-  text-align: center;
+.layout {
+  min-height: 100vh;
 }
+
+.site-sidebar {
+  padding: 1.25rem var(--pad) 1rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(11, 61, 46, 0.1);
+  background: rgba(255, 252, 245, 0.72);
+  backdrop-filter: blur(6px);
+}
+.site-main {
+  min-width: 0;
+}
+
 .brand {
-  font-size: clamp(1.35rem, 5.5vw, 2.4rem);
+  font-size: clamp(1.35rem, 5.5vw, 2.1rem);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -68,6 +79,10 @@ body {
 .tagline { margin: 0.35rem 0 0; color: var(--muted); font-size: clamp(0.88rem, 3.2vw, 1rem); }
 .updated { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); transition: color 0.3s ease; }
 .updated.just-updated { color: var(--accent); font-weight: 700; }
+.nav-links {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
 
 .card {
   margin: 0 var(--pad) 1rem;
@@ -79,12 +94,54 @@ body {
   border-radius: 8px;
 }
 @media (min-width: 1140px) {
-  .card { margin-left: auto; margin-right: auto; }
+  .site-main .card { margin-left: auto; margin-right: auto; }
 }
 .card h2 {
   margin: 0 0 0.75rem;
   font-size: clamp(1.05rem, 3.8vw, 1.15rem);
   color: var(--accent);
+}
+
+@media (min-width: 721px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .site-sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    min-height: 100vh;
+    padding: 1.75rem 1.25rem 2rem;
+    text-align: left;
+    border-bottom: 0;
+    border-right: 1px solid rgba(11, 61, 46, 0.12);
+    background: rgba(255, 252, 245, 0.88);
+  }
+  .site-sidebar .brand {
+    font-size: clamp(1.25rem, 1.6vw, 1.7rem);
+    line-height: 1.35;
+  }
+  .site-sidebar .tagline {
+    margin-top: 0.55rem;
+    font-size: 0.92rem;
+  }
+  .site-sidebar .updated {
+    margin-top: 0.85rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+  .site-sidebar .nav-links {
+    margin-top: 1.15rem;
+  }
+  .site-main {
+    padding-top: 1rem;
+  }
+  .acc-toolbar {
+    margin-left: var(--pad);
+    margin-right: var(--pad);
+  }
 }
 
 .mobile-only { display: none; }
@@ -363,10 +420,6 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 .site-footer a:hover,
 .nav-links a:hover {
   text-decoration: underline;
-}
-.nav-links {
-  margin: 0.75rem 0 0;
-  font-size: 0.95rem;
 }
 
 .help-dl { margin: 0; }
