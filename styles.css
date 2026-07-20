@@ -35,6 +35,11 @@ body {
 }
 
 @media (min-width: 721px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     background-color: var(--bg);
     background-image:
@@ -106,18 +111,22 @@ body {
   .layout {
     display: grid;
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-    align-items: start;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
   }
   .site-sidebar {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    min-height: 100vh;
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 1.75rem 1.25rem 2rem;
     text-align: left;
     border-bottom: 0;
     border-right: 1px solid rgba(11, 61, 46, 0.12);
-    background: rgba(255, 252, 245, 0.88);
+    background: rgba(255, 252, 245, 0.92);
   }
   .site-sidebar .brand {
     font-size: clamp(1.25rem, 1.6vw, 1.7rem);
@@ -136,6 +145,12 @@ body {
     margin-top: 1.15rem;
   }
   .site-main {
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding-top: 1rem;
   }
   .acc-toolbar {
