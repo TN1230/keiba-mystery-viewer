@@ -77,9 +77,8 @@ body {
   margin: 0 auto;
   line-height: 0;
   max-width: 280px;
-  padding: 0.65rem 0.75rem;
-  border-radius: 8px;
-  background: #1a1d2e;
+  padding: 0;
+  background: transparent;
   box-sizing: border-box;
 }
 .brand-logo-img {
@@ -145,6 +144,18 @@ body {
   width: 100%;
   font-size: 0.88rem;
   padding: 0.6rem 0.85rem;
+}
+.sidebar-discord-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.sidebar-limited-note {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #9b1c1c;
+  letter-spacing: 0.02em;
 }
 
 .card {
