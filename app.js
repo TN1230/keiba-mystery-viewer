@@ -138,7 +138,7 @@
     cards += "</div>";
     wrap.innerHTML = table + cards;
     wrap.querySelectorAll("[data-rid]").forEach((el) => {
-      el.addEventListener("click", () => selectRace(el.getAttribute("data-rid"), state.place));
+      el.addEventListener("click", () => selectRace(el.getAttribute("data-rid"), state.place, { scroll: false }));
     });
   }
 
