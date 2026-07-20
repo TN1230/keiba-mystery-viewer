@@ -114,6 +114,13 @@ body {
   border-radius: 4px;
   padding: 0.15rem 0.35rem;
 }
+.update-note {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+}
 .nav-links {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
@@ -218,6 +225,10 @@ body {
     font-size: 1.08rem;
     font-weight: 700;
     line-height: 1.4;
+  }
+  .site-sidebar .update-note {
+    margin-top: 0.45rem;
+    font-size: 0.76rem;
   }
   .site-sidebar .nav-links {
     margin-top: 1.15rem;
