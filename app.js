@@ -11,7 +11,14 @@
   function setCtas() {
     const line = $("lineCta");
     const disc = $("discordCta");
-    if (cfg.BRAND_NAME) $("brandName").textContent = cfg.BRAND_NAME;
+    if (cfg.BRAND_NAME) {
+      const brand = $("brandName");
+      if (brand) {
+        const img = brand.querySelector("img.brand-logo-img");
+        if (img) img.alt = cfg.BRAND_NAME;
+        else brand.textContent = cfg.BRAND_NAME;
+      }
+    }
     if (cfg.LINE_FRIEND_URL && !String(cfg.LINE_FRIEND_URL).includes("YOUR_")) {
       line.href = cfg.LINE_FRIEND_URL;
     } else {

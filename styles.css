@@ -73,6 +73,24 @@ body {
   min-width: 0;
 }
 
+.brand-logo {
+  margin: 0 auto;
+  line-height: 0;
+  max-width: 280px;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #1a1d2e;
+  box-sizing: border-box;
+}
+.brand-logo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 240px;
+  margin: 0 auto;
+  pointer-events: none;
+  user-select: none;
+}
 .brand {
   font-size: clamp(1.35rem, 5.5vw, 2.1rem);
   font-weight: 700;
@@ -127,6 +145,13 @@ body {
     border-bottom: 0;
     border-right: 1px solid rgba(11, 61, 46, 0.12);
     background: rgba(255, 252, 245, 0.92);
+  }
+  .site-sidebar .brand-logo {
+    margin: 0;
+    max-width: none;
+  }
+  .site-sidebar .brand-logo-img {
+    max-width: 100%;
   }
   .site-sidebar .brand {
     font-size: clamp(1.25rem, 1.6vw, 1.7rem);
