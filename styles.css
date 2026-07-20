@@ -316,6 +316,23 @@ body {
   display: block;
 }
 
+/* 入れ子アコーディオン（PCでは見出しなし・常時表示） */
+.acc-nested {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.acc-nested.acc-mobile-only > .acc-toggle {
+  display: none;
+}
+.acc-nested.acc-mobile-only > .acc-body {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+
 .hint { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
 
 .logic-blurbs {
@@ -707,6 +724,25 @@ table.shutuba .mark-m { color: #7b1fa2; }
   .acc.is-open .acc-body {
     display: block;
     padding: 0 0 0.65rem;
+    border-top: 1px solid rgba(11, 61, 46, 0.08);
+  }
+
+  .acc-nested.acc-mobile-only {
+    margin-top: 0.35rem;
+  }
+  .acc-nested.acc-mobile-only > .acc-toggle {
+    display: flex;
+    width: 100%;
+    margin: 0;
+    padding: 0.65rem 0;
+    min-height: var(--touch);
+  }
+  .acc-nested.acc-mobile-only.is-closed > .acc-body {
+    display: none;
+  }
+  .acc-nested.acc-mobile-only.is-open > .acc-body {
+    display: block;
+    padding: 0.35rem 0 0.25rem;
     border-top: 1px solid rgba(11, 61, 46, 0.08);
   }
 

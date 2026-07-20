@@ -403,7 +403,12 @@
     return !!(section && section.classList.contains("acc-pc"));
   }
 
+  function isMobileOnlyAcc(section) {
+    return !!(section && section.classList.contains("acc-mobile-only"));
+  }
+
   function canToggleAcc(section) {
+    if (isMobileOnlyAcc(section)) return isMobileAcc();
     return isMobileAcc() || isPcCollapsible(section);
   }
 
@@ -425,7 +430,7 @@
     if (!section) return;
     section.classList.toggle("is-open", open);
     section.classList.toggle("is-closed", !open);
-    const btn = section.querySelector(".acc-toggle");
+    const btn = section.querySelector(":scope > .acc-toggle");
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
     if (persist && canToggleAcc(section)) {
       const key = section.getAttribute("data-acc");
@@ -462,7 +467,7 @@
 
   function initAccordion() {
     document.querySelectorAll(".acc[data-acc]").forEach((section) => {
-      const btn = section.querySelector(".acc-toggle");
+      const btn = section.querySelector(":scope > .acc-toggle");
       if (!btn) return;
       btn.addEventListener("click", () => {
         if (!canToggleAcc(section)) return;
