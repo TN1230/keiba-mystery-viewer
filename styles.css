@@ -59,6 +59,13 @@ body {
   font-size: 0.95rem;
 }
 .logic-compact li { margin: 0.2rem 0; }
+.holmes-meta {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-left: 3px solid var(--accent);
+  background: rgba(11, 61, 46, 0.06);
+  font-size: 0.95rem;
+}
 .logic-compact a,
 .logic-cast .hint a {
   color: var(--accent);
