@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>項目説明ヘルプ｜競馬AI ミステリー予想</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="help-page">
+  <header class="site-header">
+    <div class="brand" id="brandName">競馬AI ミステリー予想</div>
+    <p class="tagline">項目説明ヘルプ（閲覧サイト・予想PDF共通）</p>
+    <p class="nav-links">
+      <a href="index.html">← 本日の予想サマリーへ戻る</a>
+    </p>
+  </header>
+
+  <section class="card">
+    <h2>このページについて</h2>
+    <p>通知で案内している「項目説明ヘルプPDF」と同じ趣旨の説明です。閲覧サイトの見方と、印付き出馬表PDFの各項目・短評・レース評価をまとめています。</p>
+  </section>
+
+  <section class="card">
+    <h2>閲覧サイトの見方</h2>
+    <dl class="help-dl">
+      <dt>本日の優先候補（Top5）</dt>
+      <dd>当日レースのうちホームズ指数が高い上位5件。タップすると下のレース要約へジャンプします。</dd>
+      <dt>会場マトリクス</dt>
+      <dd>開催場ごとの一覧。行を選ぶとレース要約が表示されます。</dd>
+      <dt>偏差</dt>
+      <dd>レース自体の期待値の高さ（相対偏差）。高いほど当日の「勝負候補」として相対的に強い評価です。</dd>
+      <dt>推</dt>
+      <dd>ホームズ指数が推す推奨ロジックの略号（ワ／アイ／モ／ハ／ホプ）。</dd>
+      <dt>ホームズ指数</dt>
+      <dd>当日全レース内での優先度スコアと順位。ジャンプボタンの青＝1〜5位、緑＝6〜10位です。</dd>
+      <dt>ワ／アイ／モ／ハ・ホプ</dt>
+      <dd>各ロジックの勝負判断ラベル（買・様子・見送など）の要約セルです。</dd>
+      <dt>レース要約</dt>
+      <dd>印の摘要、推奨ロジック、予想詳細PDF／項目説明PDFへのリンクを表示します。</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>ロジックの役割</h2>
+    <dl class="help-dl">
+      <dt>ワトソン（ワ）</dt>
+      <dd>手堅さ・安定志向の印。</dd>
+      <dt>アイリーン（アイ）</dt>
+      <dd>妙味重視の印。短評ではレース評価（本勝負／絞り推し／様子見／勝負見送り）と推奨買い目に触れます。</dd>
+      <dt>モーリアティ（モ）</dt>
+      <dd>重賞特化。重賞時のみ「本命線／均衡線／波乱線」などのシナリオと推奨買い目を示します。</dd>
+      <dt>ハンター（ハ）</dt>
+      <dd>夏競馬特化。6〜9月・札幌／函館／福島／新潟／小倉・非重賞・新馬戦以外で専用モデルから付与。</dd>
+      <dt>ホプキンス（ホプ）</dt>
+      <dd>新馬戦特化。レース名に「新馬」を含む戦（未勝利戦除く）で専用モデルから付与。</dd>
+    </dl>
+    <p class="hint">短評の並びは、該当時にハンター／ホプキンス → ワトソン → アイリーン → モーリアティの順です。直前に【ホームズ推奨】で推すロジック名を示します。</p>
+  </section>
+
+  <section class="card">
+    <h2>レース評価段階（アイリーン短評内）</h2>
+    <dl class="help-dl">
+      <dt>本勝負</dt>
+      <dd>強気。本命軸に全印へ流しを推奨。</dd>
+      <dt>絞り推し</dt>
+      <dd>慎重。本命単複や、本命から比較的重い印のみへ流しを推奨。</dd>
+      <dt>様子見</dt>
+      <dd>見送り寄りだが条件はボーダー付近。余力があれば◎−○▲。</dd>
+      <dt>勝負見送り</dt>
+      <dd>勝負条件に到達しておらず、勝ちを重視するなら見送り推奨。</dd>
+    </dl>
+    <p class="hint">アイリーンのレース評価は、全勝負レースの想定買い目のワイドを均等買いした場合に的中率20％・回収率110%を目標とした判定基準です。</p>
+  </section>
+
+  <section class="card">
+    <h2>期待値ランク（レース自体の期待値の高さ）</h2>
+    <dl class="help-dl">
+      <dt>∞</dt>
+      <dd>偏差70以上。何らかの要素が異常に高く評価されている可能性があり、額面通りの評価がし難い（過信禁物）。A／B帯より慎重な運用を推奨。</dd>
+      <dt>S</dt>
+      <dd>偏差65–69。高水準本命帯。</dd>
+      <dt>A+〜D</dt>
+      <dd>偏差60未満から段階的に低下。詳細は予想画面・PDFの期待値ランク表示を参照。</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>印付き出馬表PDFの主な項目</h2>
+    <dl class="help-dl">
+      <dt>枠番／馬番／馬名</dt>
+      <dd>枠・馬番・出走馬名。馬名右に色付き略号（D＝初ダート、B＝ブリンカー継続、NB＝初／非継続ブリンカー）が付く場合あり。</dd>
+      <dt>性齢／斤量／騎手／脚質</dt>
+      <dd>性別と年齢、負担重量、騎手、推定脚質（逃げ／先行／差し／追込など）。</dd>
+      <dt>単勝／人気</dt>
+      <dd>単勝オッズと想定人気。オッズは推定補完値が入る場合あり。</dd>
+      <dt>勝期待%／3着期待%</dt>
+      <dd>推定勝率・推定3着内率（%）。</dd>
+      <dt>馬指数</dt>
+      <dd>当レース出走馬の総合評価の相対指標（推定勝率・3着内率から算出）。騎手・コース条件などが推定に含まれるため、純粋な馬単体の能力ではない。レース内1位＝100。</dd>
+      <dt>ワト／アイ／モリ／ハン／ホプ</dt>
+      <dd>各ロジックの印列。該当しないロジックは空欄や「-」になります。</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>危険な人気馬（AI・任意ON時）</h2>
+    <p>【切る理由】【買うなら見る点】の2部構成です。印なし人気馬の実戦勝ちも踏まえ、切る検討と買う場合の評価点を示します。</p>
+  </section>
+
+  <section class="card">
+    <h2>補足</h2>
+    <ul class="help-list">
+      <li>指標は予測ロジック更新により将来変更される場合があります。</li>
+      <li>各レースの「項目説明PDF」リンクは、通知時と同じヘルプPDFへの直リンクです。</li>
+      <li>本サイトは閲覧専用です。予想の自動実行やオッズ取得は行いません。</li>
+    </ul>
+  </section>
+
+  <footer class="site-footer">
+    <p><a href="index.html">本日の予想サマリーへ戻る</a></p>
+  </footer>
+
+  <script src="config.js"></script>
+  <script>
+    (function () {
+      var cfg = window.PUBLIC_VIEWER_CONFIG || {};
+      if (cfg.BRAND_NAME) {
+        var el = document.getElementById("brandName");
+        if (el) el.textContent = cfg.BRAND_NAME;
+        document.title = "項目説明ヘルプ｜" + cfg.BRAND_NAME;
+      }
+    })();
+  </script>
+</body>
+</html>
