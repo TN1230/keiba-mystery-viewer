@@ -53,20 +53,23 @@ body {
 
 .hint { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.92rem; }
 
-.logic-compact {
-  margin: 0 0 0.65rem;
-  padding-left: 1.15rem;
-  font-size: 0.95rem;
-}
-.logic-compact li { margin: 0.2rem 0; }
-.holmes-meta {
+.logic-blurbs {
+  display: grid;
+  gap: 0.55rem;
   margin: 0 0 0.75rem;
-  padding: 0.65rem 0.8rem;
-  border-left: 3px solid var(--accent);
-  background: rgba(11, 61, 46, 0.06);
-  font-size: 0.95rem;
 }
-.logic-compact a,
+.logic-blurb {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-left: 3px solid rgba(11, 61, 46, 0.28);
+  background: #fff;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.logic-blurb.is-meta {
+  border-left-color: var(--accent);
+  background: rgba(11, 61, 46, 0.06);
+}
 .logic-cast .hint a {
   color: var(--accent);
   font-weight: 600;
