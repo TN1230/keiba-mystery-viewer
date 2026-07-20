@@ -266,6 +266,14 @@
     return ACC_MQ.matches;
   }
 
+  function isPcCollapsible(section) {
+    return !!(section && section.classList.contains("acc-pc"));
+  }
+
+  function canToggleAcc(section) {
+    return isMobileAcc() || isPcCollapsible(section);
+  }
+
   function readAccPrefs() {
     try {
       return JSON.parse(sessionStorage.getItem(ACC_STORAGE_KEY) || "{}") || {};
@@ -286,7 +294,7 @@
     section.classList.toggle("is-closed", !open);
     const btn = section.querySelector(".acc-toggle");
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
-    if (persist && isMobileAcc()) {
+    if (persist && canToggleAcc(section)) {
       const key = section.getAttribute("data-acc");
       if (!key) return;
       const prefs = readAccPrefs();
@@ -307,7 +315,7 @@
     document.querySelectorAll(".acc[data-acc]").forEach((section) => {
       const key = section.getAttribute("data-acc");
       let open;
-      if (!isMobileAcc()) {
+      if (!isMobileAcc() && !isPcCollapsible(section)) {
         open = true;
       } else if (Object.prototype.hasOwnProperty.call(prefs, key)) {
         open = !!prefs[key];
@@ -324,7 +332,7 @@
       const btn = section.querySelector(".acc-toggle");
       if (!btn) return;
       btn.addEventListener("click", () => {
-        if (!isMobileAcc()) return;
+        if (!canToggleAcc(section)) return;
         const next = !section.classList.contains("is-open");
         setAccordionOpen(section, next, true);
       });

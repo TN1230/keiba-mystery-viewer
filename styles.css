@@ -498,6 +498,54 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   .acc-chevron {
     display: none;
   }
+
+  /* PCでも折りたたみ対象（登場人物の役割説明など） */
+  .acc.acc-pc {
+    padding-top: 0.25rem;
+    padding-bottom: 0.35rem;
+  }
+  .acc.acc-pc .acc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: calc(100% + 2 * var(--pad));
+    margin: 0 calc(var(--pad) * -1);
+    padding: 0.75rem var(--pad);
+    cursor: pointer;
+    pointer-events: auto;
+    min-height: var(--touch);
+  }
+  .acc.acc-pc .acc-hint {
+    display: block;
+    flex: 1;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .acc.acc-pc .acc-chevron {
+    display: block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-right: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    flex: 0 0 auto;
+  }
+  .acc.acc-pc.is-open .acc-chevron {
+    transform: rotate(-135deg);
+    margin-top: 0.25rem;
+  }
+  .acc.acc-pc.is-closed .acc-body {
+    display: none;
+  }
+  .acc.acc-pc.is-open .acc-body {
+    display: block;
+    padding: 0 0 0.65rem;
+    border-top: 1px solid rgba(11, 61, 46, 0.08);
+  }
 }
 
 @media (max-width: 380px) {
