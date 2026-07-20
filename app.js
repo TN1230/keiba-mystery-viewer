@@ -113,8 +113,8 @@
       holmes_index: "ホームズ指数",
       ワ: "ワトソン",
       アイ: "アイリーン",
-      モ: "モーリアティ",
-      "ハ/ホプ": "ハンター/ホプキンス",
+      モ: "モーリアティ（登場）",
+      "ハ/ホプ": "ハンター/ホプキンス（登場）",
     };
     let table = "<div class='matrix-desktop'><div class='table-wrap'><table class='matrix'><thead><tr>";
     for (const c of cols) table += `<th>${labels[c] || c}</th>`;
@@ -137,7 +137,7 @@
             <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
             <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
             <div><span>モーリアティ</span><strong>${escapeHtml(row["モ"] ?? "-")}</strong></div>
-            <div><span>ハンター/ホプキンス</span><strong>${escapeHtml(row["ハ/ホプ"] ?? "-")}</strong></div>
+            <div><span>特化（ハ/ホプ）</span><strong>${escapeHtml(row["ハ/ホプ"] ?? "-")}</strong></div>
           </div>
         </button>`;
     }
