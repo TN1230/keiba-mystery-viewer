@@ -90,6 +90,14 @@ body {
   pointer-events: none;
   user-select: none;
 }
+.responsible-gaming {
+  margin: 0.55rem 0 0;
+  color: #c62828;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
 .brand {
   font-size: clamp(1.35rem, 5.5vw, 2.1rem);
   font-weight: 700;
@@ -211,6 +219,10 @@ body {
   }
   .site-sidebar .brand-logo-img {
     max-width: 100%;
+  }
+  .site-sidebar .responsible-gaming {
+    margin-top: 0.65rem;
+    font-size: 0.8rem;
   }
   .site-sidebar .brand {
     font-size: clamp(1.25rem, 1.6vw, 1.7rem);
