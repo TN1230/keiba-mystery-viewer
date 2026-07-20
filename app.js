@@ -164,12 +164,12 @@
         ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
         : `${r.place} ${rn}R`;
       b.title = tip;
-      b.addEventListener("click", () => selectRace(r.race_id, state.place));
+      b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
       box.appendChild(b);
     }
   }
 
-  function selectRace(raceId, place) {
+  function selectRace(raceId, place, opts = {}) {
     state.raceId = raceId;
     if (place) state.place = place;
     renderTabs();
@@ -177,7 +177,9 @@
     renderJumps();
     renderDetail();
     openAccordion("race");
-    $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (opts.scroll !== false) {
+      $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function renderDetail() {
