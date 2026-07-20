@@ -100,8 +100,20 @@ body {
   overflow-wrap: anywhere;
 }
 .tagline { margin: 0.35rem 0 0; color: var(--muted); font-size: clamp(0.88rem, 3.2vw, 1rem); }
-.updated { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); transition: color 0.3s ease; }
-.updated.just-updated { color: var(--accent); font-weight: 700; }
+.updated {
+  margin: 0.65rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.4;
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+.updated.just-updated {
+  color: #084032;
+  background: rgba(11, 61, 46, 0.1);
+  border-radius: 4px;
+  padding: 0.15rem 0.35rem;
+}
 .nav-links {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
@@ -190,9 +202,10 @@ body {
     font-size: 0.92rem;
   }
   .site-sidebar .updated {
-    margin-top: 0.85rem;
-    font-size: 0.82rem;
-    line-height: 1.45;
+    margin-top: 0.95rem;
+    font-size: 1.08rem;
+    font-weight: 700;
+    line-height: 1.4;
   }
   .site-sidebar .nav-links {
     margin-top: 1.15rem;
