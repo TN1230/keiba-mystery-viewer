@@ -213,6 +213,7 @@
     renderMatrix();
     renderJumps();
     renderDetail();
+    renderShutuba();
     openAccordion("race");
     if (opts.scroll !== false) {
       $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -248,6 +249,59 @@
     box.innerHTML = html;
   }
 
+  function markHonmeiClass(col) {
+    if (col === "ワトソン") return "mark-honmei mark-w";
+    if (col === "アイリーン") return "mark-honmei mark-i";
+    if (col === "モーリアティ") return "mark-honmei mark-m";
+    return "mark-honmei mark-h";
+  }
+
+  function renderShutuba() {
+    const box = $("shutubaDetail");
+    if (!box) return;
+    const found = findRace(state.raceId);
+    if (!found) {
+      box.innerHTML = "<p class='hint'>レースを選ぶと出馬表が表示されます。</p>";
+      return;
+    }
+    const shutuba = found.race.shutuba;
+    if (!shutuba || !Array.isArray(shutuba.rows) || !shutuba.rows.length) {
+      box.innerHTML =
+        "<p class='hint'>このレースの出馬表はまだ公開されていません（本体アプリ再公開後に表示されます）。</p>";
+      return;
+    }
+    const cols = Array.isArray(shutuba.columns) ? shutuba.columns : [];
+    const markCols = new Set(Array.isArray(shutuba.mark_columns) ? shutuba.mark_columns : []);
+    let html = '<div class="table-wrap"><table class="shutuba"><thead><tr>';
+    for (const c of cols) {
+      html += `<th>${escapeHtml(c)}</th>`;
+    }
+    html += "</tr></thead><tbody>";
+    for (const row of shutuba.rows) {
+      const st = row._style || {};
+      const honmei = st.honmei || {};
+      html += `<tr${st.cancel ? ' class="is-cancel"' : ""}>`;
+      for (const c of cols) {
+        const classes = [];
+        let styleAttr = "";
+        if (c === "枠番" && st.frame_bg) {
+          classes.push("frame-cell");
+          styleAttr = ` style="background:${escapeAttr(st.frame_bg)};color:${escapeAttr(st.frame_fg || "#000")}"`;
+        }
+        if (st.cancel && (c === "馬名" || c === "単勝")) classes.push("cancel-text");
+        if (markCols.has(c) && honmei[c]) classes.push(markHonmeiClass(c));
+        const cls = classes.length ? ` class="${classes.join(" ")}"` : "";
+        html += `<td${cls}${styleAttr}>${escapeHtml(row[c] ?? "")}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table></div>";
+    if (!shutuba.predicted) {
+      html += '<p class="hint">予想前の出馬表です（印列は予想後に表示されます）。</p>';
+    }
+    box.innerHTML = html;
+  }
+
   function escapeHtml(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -275,7 +329,10 @@
     renderTabs();
     renderMatrix();
     renderJumps();
-    if (state.raceId) renderDetail();
+    if (state.raceId) {
+      renderDetail();
+      renderShutuba();
+    }
   }
 
   async function loadSnapshot({ silent = false } = {}) {
