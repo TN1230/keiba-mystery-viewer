@@ -68,7 +68,7 @@ body {
 }
 .logic-blurb.is-meta {
   border-left-color: var(--accent);
-  background: rgba(11, 61, 46, 0.06);
+  background: rgba(11, 61, 46, 0.12);
 }
 .logic-cast .hint a {
   color: var(--accent);
