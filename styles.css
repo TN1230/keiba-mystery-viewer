@@ -34,6 +34,25 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+@media (min-width: 721px) {
+  body {
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(243, 240, 232, 0.92) 0%,
+        rgba(243, 240, 232, 0.86) 42%,
+        rgba(231, 239, 232, 0.9) 100%
+      ),
+      radial-gradient(ellipse at 50% 0%, rgba(255, 248, 231, 0.65) 0%, transparent 58%),
+      url("assets/bg-holmes-pattern-b-foggy-london-street.png");
+    background-position: center top, center top, center top;
+    background-size: auto, auto, cover;
+    background-repeat: no-repeat, no-repeat, no-repeat;
+    background-attachment: scroll, scroll, fixed;
+  }
+}
+
 .site-header {
   padding: 1.5rem var(--pad) 0.85rem;
   text-align: center;
@@ -73,7 +92,6 @@ body {
 .acc-toolbar {
   margin: 0 var(--pad) 0.75rem;
   max-width: 1100px;
-  display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
 }
@@ -375,7 +393,9 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 
 @media (max-width: 720px) {
-  .mobile-only { display: flex; }
+  .acc-toolbar.mobile-only {
+    display: flex;
+  }
   .acc-toolbar[hidden] { display: none !important; }
 
   .acc {
