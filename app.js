@@ -98,6 +98,36 @@
     return venues().find((v) => v.place === state.place) || null;
   }
 
+  function thirdDetectiveLabel(row) {
+    const cur = row && row["第3探偵"];
+    if (cur && cur !== "-") return cur;
+    const mori = String((row && row["モ"]) || "").trim();
+    const hun = String((row && (row["ハ/ホプ"] || row["ハ"] || row["ホプ"])) || "").trim();
+    if (mori && mori !== "-") {
+      if (mori === "モリ" || mori.includes("買") || mori.includes("様子") || mori.includes("モーリ")) {
+        return "モリ";
+      }
+    }
+    if (hun && hun !== "-") {
+      if (hun === "ホプ" || hun.includes("新馬") || hun.includes("ホプキンス")) return "ホプ";
+      if (hun === "ハ" || hun.includes("夏") || hun.includes("ハンター") || hun.includes("買") || hun.includes("様子")) {
+        return "ハ";
+      }
+    }
+    // レース詳細 cells からのフォールバック
+    const cells = (row && row.cells) || {};
+    const cMori = String(cells["モ"] || "").trim();
+    const cHun = String(cells["ハ/ホプ"] || "").trim();
+    if (cMori && cMori !== "-" && (cMori === "モリ" || cMori.includes("買") || cMori.includes("様子"))) {
+      return "モリ";
+    }
+    if (cHun && cHun !== "-") {
+      if (cHun === "ホプ" || cHun.includes("新馬") || cHun.includes("ホプキンス")) return "ホプ";
+      if (cHun.includes("夏") || cHun.includes("ハンター") || cHun.includes("買") || cHun === "ハ") return "ハ";
+    }
+    return cur || "-";
+  }
+
   function renderMatrix() {
     const wrap = $("matrixWrap");
     const v = currentVenue();
@@ -121,9 +151,11 @@
     let cards = "<div class='matrix-mobile'>";
     for (const row of v.matrix) {
       const sel = String(row.race_id) === String(state.raceId) ? " selected" : "";
+      const third = thirdDetectiveLabel(row);
       table += `<tr class="${sel}" data-rid="${row.race_id}">`;
       for (const c of cols) {
-        table += `<td>${escapeHtml(row[c] ?? "-")}</td>`;
+        const val = c === "第3探偵" ? third : (row[c] ?? "-");
+        table += `<td>${escapeHtml(val)}</td>`;
       }
       table += "</tr>";
       cards += `
@@ -135,7 +167,7 @@
             <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
             <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
             <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
-            <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(row["第3探偵"] ?? "-")}</strong></div>
+            <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(third)}</strong></div>
           </div>
         </button>`;
     }
