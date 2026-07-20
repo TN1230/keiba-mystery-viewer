@@ -220,11 +220,18 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
-  function applyData(data) {
+  function applyData(data, { flash = false } = {}) {
+    const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
-    $("updatedAt").textContent = data.updated_at
+    const el = $("updatedAt");
+    const text = data.updated_at
       ? `最終更新: ${data.updated_at}（開催日 ${data.schedule_date || "-"}）`
       : "更新時刻不明";
+    el.textContent = text;
+    if (flash && prevUpdated && data.updated_at && prevUpdated !== data.updated_at) {
+      el.classList.add("just-updated");
+      window.setTimeout(() => el.classList.remove("just-updated"), 2500);
+    }
     renderTop5();
     renderTabs();
     renderMatrix();
@@ -232,7 +239,7 @@
     if (state.raceId) renderDetail();
   }
 
-  async function loadSnapshot() {
+  async function loadSnapshot({ silent = false } = {}) {
     const url = cfg.SNAPSHOT_URL;
     if (!url || String(url).includes("YOUR_PROJECT")) {
       $("updatedAt").innerHTML = "<span class='error'>config.js の SNAPSHOT_URL を設定してください</span>";
@@ -244,9 +251,11 @@
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      applyData(data);
+      applyData(data, { flash: silent });
     } catch (e) {
-      $("updatedAt").innerHTML = `<span class="error">スナップショット取得失敗: ${escapeHtml(e.message || e)}</span>`;
+      if (!silent) {
+        $("updatedAt").innerHTML = `<span class="error">スナップショット取得失敗: ${escapeHtml(e.message || e)}</span>`;
+      }
     }
   }
 
@@ -348,6 +357,11 @@
   setCtas();
   initAccordion();
   loadSnapshot();
-  const poll = Number(cfg.POLL_INTERVAL_MS) || 60000;
-  if (poll > 0) setInterval(loadSnapshot, poll);
+  const poll = Number(cfg.POLL_INTERVAL_MS) || 30000;
+  if (poll > 0) {
+    window.setInterval(() => loadSnapshot({ silent: true }), poll);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) loadSnapshot({ silent: true });
+  });
 })();
