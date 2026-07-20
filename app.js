@@ -98,34 +98,53 @@
     return venues().find((v) => v.place === state.place) || null;
   }
 
+  function matrixSuiLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s || s === "-") return "-";
+    const map = {
+      ワ: "ワトソン",
+      アイ: "アイリーン",
+      モ: "モーリアティ",
+      モリ: "モーリアティ",
+      ハ: "ハンター",
+      ホプ: "ホプキンス",
+      "ハ/ホプ": "ハンター",
+    };
+    return map[s] || s;
+  }
+
   function thirdDetectiveLabel(row) {
+    const mapPresence = (raw) => {
+      const s = String(raw || "").trim();
+      if (!s || s === "-") return "";
+      if (s === "モーリアティ" || s === "モリ" || s.includes("モーリ")) return "モーリアティ";
+      if (s === "ホプキンス" || s === "ホプ" || s.includes("ホプキンス") || s.includes("新馬")) return "ホプキンス";
+      if (s === "ハンター" || s === "ハ" || s.includes("ハンター") || s.includes("夏")) return "ハンター";
+      // 旧スナップショットの買/様子ラベルはモーリアティ列由来とみなす
+      if (s.includes("買") || s.includes("様子") || s.includes("見送")) return "モーリアティ";
+      return "";
+    };
+
     const cur = row && row["第3探偵"];
-    if (cur && cur !== "-") return cur;
-    const mori = String((row && row["モ"]) || "").trim();
-    const hun = String((row && (row["ハ/ホプ"] || row["ハ"] || row["ホプ"])) || "").trim();
-    if (mori && mori !== "-") {
-      if (mori === "モリ" || mori.includes("買") || mori.includes("様子") || mori.includes("モーリ")) {
-        return "モリ";
-      }
-    }
-    if (hun && hun !== "-") {
-      if (hun === "ホプ" || hun.includes("新馬") || hun.includes("ホプキンス")) return "ホプ";
-      if (hun === "ハ" || hun.includes("夏") || hun.includes("ハンター") || hun.includes("買") || hun.includes("様子")) {
-        return "ハ";
-      }
-    }
-    // レース詳細 cells からのフォールバック
-    const cells = (row && row.cells) || {};
-    const cMori = String(cells["モ"] || "").trim();
-    const cHun = String(cells["ハ/ホプ"] || "").trim();
-    if (cMori && cMori !== "-" && (cMori === "モリ" || cMori.includes("買") || cMori.includes("様子"))) {
-      return "モリ";
-    }
-    if (cHun && cHun !== "-") {
-      if (cHun === "ホプ" || cHun.includes("新馬") || cHun.includes("ホプキンス")) return "ホプ";
-      if (cHun.includes("夏") || cHun.includes("ハンター") || cHun.includes("買") || cHun === "ハ") return "ハ";
+    const fromCur = mapPresence(cur);
+    if (fromCur) return fromCur;
+
+    const candidates = [
+      row && row["モ"],
+      row && (row["ハ/ホプ"] || row["ハ"] || row["ホプ"]),
+      row && row.cells && (row.cells["モ"] || row.cells["モーリアティ"]),
+      row && row.cells && (row.cells["ハ/ホプ"] || row.cells["ハンター"] || row.cells["ホプキンス"]),
+    ];
+    for (const c of candidates) {
+      const n = mapPresence(c);
+      if (n) return n;
     }
     return cur || "-";
+  }
+
+  function matrixCell(row, fullKey, shortKey) {
+    const v = row && (row[fullKey] ?? row[shortKey]);
+    return v == null || v === "" ? "-" : v;
   }
 
   function renderMatrix() {
@@ -135,14 +154,14 @@
       wrap.innerHTML = "<p class='hint'>マトリクスなし</p>";
       return;
     }
-    const cols = ["race", "dev", "sui", "holmes_index", "ワ", "アイ", "第3探偵"];
+    const cols = ["race", "dev", "sui", "holmes_index", "ワトソン", "アイリーン", "第3探偵"];
     const labels = {
       race: "Race",
       dev: "偏差",
       sui: "ホームズ推",
       holmes_index: "ホームズ指数",
-      ワ: "ワトソン",
-      アイ: "アイリーン",
+      ワトソン: "ワトソン",
+      アイリーン: "アイリーン",
       第3探偵: "第3探偵",
     };
     let table = "<div class='matrix-desktop'><div class='table-wrap'><table class='matrix'><thead><tr>";
@@ -152,9 +171,17 @@
     for (const row of v.matrix) {
       const sel = String(row.race_id) === String(state.raceId) ? " selected" : "";
       const third = thirdDetectiveLabel(row);
+      const watson = matrixCell(row, "ワトソン", "ワ");
+      const irene = matrixCell(row, "アイリーン", "アイ");
+      const sui = matrixSuiLabel(row.sui);
       table += `<tr class="${sel}" data-rid="${row.race_id}">`;
       for (const c of cols) {
-        const val = c === "第3探偵" ? third : (row[c] ?? "-");
+        let val = "-";
+        if (c === "第3探偵") val = third;
+        else if (c === "ワトソン") val = watson;
+        else if (c === "アイリーン") val = irene;
+        else if (c === "sui") val = sui;
+        else val = row[c] ?? "-";
         table += `<td>${escapeHtml(val)}</td>`;
       }
       table += "</tr>";
@@ -163,10 +190,10 @@
           <p class="matrix-card-title">${escapeHtml(row.race || "-")}</p>
           <div class="matrix-card-grid">
             <div><span>偏差</span><strong>${escapeHtml(row.dev ?? "-")}</strong></div>
-            <div><span>ホームズ推</span><strong>${escapeHtml(row.sui ?? "-")}</strong></div>
+            <div><span>ホームズ推</span><strong>${escapeHtml(sui)}</strong></div>
             <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
-            <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
-            <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
+            <div><span>ワトソン</span><strong>${escapeHtml(watson)}</strong></div>
+            <div><span>アイリーン</span><strong>${escapeHtml(irene)}</strong></div>
             <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(third)}</strong></div>
           </div>
         </button>`;
