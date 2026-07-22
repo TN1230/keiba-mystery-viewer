@@ -35,6 +35,11 @@ body {
 }
 
 @media (min-width: 721px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     background-color: var(--bg);
     background-image:
@@ -53,12 +58,90 @@ body {
   }
 }
 
-.site-header {
-  padding: 1.5rem var(--pad) 0.85rem;
+.layout {
+  min-height: 100vh;
+}
+
+.site-sidebar {
+  padding: 1.25rem var(--pad) 1rem;
   text-align: center;
+  border-bottom: 1px solid rgba(11, 61, 46, 0.1);
+  background: rgba(255, 252, 245, 0.72);
+  backdrop-filter: blur(6px);
+}
+.site-main {
+  min-width: 0;
+  position: relative;
+}
+
+/* 開催日終了後: 右ペイン（本編）上の半透明白レイヤー */
+.day-closed-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: rgba(255, 255, 255, 0.5);
+  pointer-events: auto;
+}
+body.is-day-closed .day-closed-overlay {
+  display: flex;
+}
+body.is-day-closed .site-main {
+  overflow: hidden;
+}
+.day-closed-message {
+  margin: 0;
+  max-width: 18em;
+  text-align: center;
+  color: #d40000;
+  font-weight: 800;
+  font-size: clamp(1.55rem, 3.6vw, 2.85rem);
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  font-family:
+    "創英角ポップ体",
+    "Soei Kakugothic Pop",
+    "SoeiKakugothicPop",
+    "Souei Kaku Pop",
+    "M PLUS Rounded 1c",
+    "Hiragino Maru Gothic ProN",
+    "Yu Gothic",
+    sans-serif;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 12px rgba(255, 255, 255, 0.55);
+}
+
+.brand-logo {
+  margin: 0 auto;
+  line-height: 0;
+  max-width: 280px;
+  padding: 0;
+  background: transparent;
+  box-sizing: border-box;
+}
+.brand-logo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 240px;
+  margin: 0 auto;
+  pointer-events: none;
+  user-select: none;
+}
+.responsible-gaming {
+  margin: 0.55rem 0 0;
+  color: #ff0000;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
 }
 .brand {
-  font-size: clamp(1.35rem, 5.5vw, 2.4rem);
+  font-size: clamp(1.35rem, 5.5vw, 2.1rem);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -66,8 +149,81 @@ body {
   overflow-wrap: anywhere;
 }
 .tagline { margin: 0.35rem 0 0; color: var(--muted); font-size: clamp(0.88rem, 3.2vw, 1rem); }
-.updated { margin: 0.5rem 0 0; font-size: 0.88rem; color: var(--muted); transition: color 0.3s ease; }
-.updated.just-updated { color: var(--accent); font-weight: 700; }
+.updated {
+  margin: 0.65rem 0 0;
+  font-family: "創英角ポップ体", "SoeiKakugothicPop", "Souei Kaku Pop", "Hiragino Maru Gothic ProN", "Yu Gothic", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.4;
+  transition: color 0.3s ease, background-color 0.3s ease;
+}
+.updated.just-updated {
+  color: #084032;
+  background: rgba(11, 61, 46, 0.1);
+  border-radius: 4px;
+  padding: 0.15rem 0.35rem;
+}
+.update-note {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+}
+.update-timing {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-line;
+}
+.nav-links {
+  margin: 0.75rem 0 0;
+  font-size: 0.95rem;
+}
+
+.sidebar-subscribe {
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(11, 61, 46, 0.12);
+  text-align: left;
+}
+.sidebar-subscribe-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.sidebar-subscribe-hint {
+  margin: 0.4rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.sidebar-cta {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sidebar-cta .btn {
+  width: 100%;
+  font-size: 0.88rem;
+  padding: 0.6rem 0.85rem;
+}
+.sidebar-discord-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.sidebar-limited-note {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #9b1c1c;
+  letter-spacing: 0.02em;
+}
 
 .card {
   margin: 0 var(--pad) 1rem;
@@ -79,7 +235,7 @@ body {
   border-radius: 8px;
 }
 @media (min-width: 1140px) {
-  .card { margin-left: auto; margin-right: auto; }
+  .site-main .card { margin-left: auto; margin-right: auto; }
 }
 .card h2 {
   margin: 0 0 0.75rem;
@@ -87,7 +243,130 @@ body {
   color: var(--accent);
 }
 
+@media (min-width: 721px) {
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .site-sidebar {
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 1.75rem 1.25rem 2rem;
+    text-align: left;
+    border-bottom: 0;
+    border-right: 1px solid rgba(11, 61, 46, 0.12);
+    background: rgba(255, 252, 245, 0.92);
+  }
+  .site-sidebar .brand-logo {
+    margin: 0;
+    max-width: none;
+  }
+  .site-sidebar .brand-logo-img {
+    max-width: 100%;
+  }
+  .site-sidebar .responsible-gaming {
+    margin-top: 0.65rem;
+    font-size: 0.8rem;
+  }
+  .site-sidebar .brand {
+    font-size: clamp(1.25rem, 1.6vw, 1.7rem);
+    line-height: 1.35;
+  }
+  .site-sidebar .tagline {
+    margin-top: 0.55rem;
+    font-size: 0.92rem;
+  }
+  .site-sidebar .updated {
+    margin-top: 0.95rem;
+    font-size: 1.08rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .site-sidebar .update-note {
+    margin-top: 0.45rem;
+    font-size: 0.76rem;
+  }
+  .site-sidebar .update-timing {
+    margin-top: 0.55rem;
+    font-size: 0.74rem;
+  }
+  .site-sidebar .nav-links {
+    margin-top: 1.15rem;
+  }
+  .site-sidebar .sidebar-jumps {
+    display: block;
+    margin-top: 1.25rem;
+  }
+  .pc-only {
+    display: block !important;
+  }
+  .site-main {
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-top: 1rem;
+  }
+  .acc-toolbar {
+    margin-left: var(--pad);
+    margin-right: var(--pad);
+  }
+}
+
 .mobile-only { display: none; }
+.pc-only { display: block; }
+
+/* レースジャンプは PC サイドバー専用（モバイルはマトリクス内） */
+.sidebar-jumps {
+  display: none;
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(11, 61, 46, 0.12);
+  text-align: left;
+}
+.sidebar-jumps-title {
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.sidebar-venue-tabs {
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.sidebar-venue-tabs .tab {
+  min-height: 2.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.88rem;
+}
+.sidebar-jump-legend {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+}
+.sidebar-jump-row {
+  margin: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.sidebar-jump-row .jump {
+  min-height: 2.4rem;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.15rem;
+}
+.jump.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  font-weight: 800;
+}
 
 .acc-toolbar {
   margin: 0 var(--pad) 0.75rem;
@@ -113,6 +392,23 @@ body {
 }
 .acc-body {
   display: block;
+}
+
+/* 入れ子アコーディオン（PCでは見出しなし・常時表示） */
+.acc-nested {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.acc-nested.acc-mobile-only > .acc-toggle {
+  display: none;
+}
+.acc-nested.acc-mobile-only > .acc-body {
+  display: block;
+  padding: 0;
+  border: 0;
 }
 
 .hint { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
@@ -275,11 +571,14 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   grid-column: 1 / -1;
 }
 
+.jump-legend {
+  margin: 0 0 0.45rem;
+}
 .jump-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
   gap: 0.4rem;
-  margin-top: 0.75rem;
+  margin: 0 0 0.85rem;
 }
 .jump {
   border: 1px solid rgba(0,0,0,0.15);
@@ -345,6 +644,55 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   text-decoration: none;
 }
 
+.shutuba-detail .hint {
+  margin: 0;
+}
+table.shutuba {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+table.shutuba th,
+table.shutuba td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.28rem 0.4rem;
+  white-space: nowrap;
+  text-align: center;
+  vertical-align: middle;
+}
+table.shutuba th {
+  background: rgba(11, 61, 46, 0.08);
+  color: var(--accent);
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+table.shutuba td:nth-child(3),
+table.shutuba th:nth-child(3) {
+  text-align: left;
+  white-space: normal;
+  min-width: 6.5rem;
+  max-width: 11rem;
+}
+table.shutuba .frame-cell {
+  font-weight: 700;
+  border-color: rgba(0, 0, 0, 0.25);
+}
+table.shutuba .cancel-text {
+  color: #c62828;
+  font-weight: 700;
+}
+table.shutuba .mark-honmei {
+  font-weight: 700;
+}
+table.shutuba .mark-w { color: #d32f2f; }
+table.shutuba .mark-i { color: #1565c0; }
+table.shutuba .mark-h { color: #16a085; }
+table.shutuba .mark-m { color: #7b1fa2; }
+
 .site-footer {
   text-align: center;
   padding: 1.25rem var(--pad) calc(2rem + env(safe-area-inset-bottom));
@@ -360,10 +708,6 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 .site-footer a:hover,
 .nav-links a:hover {
   text-decoration: underline;
-}
-.nav-links {
-  margin: 0.75rem 0 0;
-  font-size: 0.95rem;
 }
 
 .help-dl { margin: 0; }
@@ -384,6 +728,27 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 .help-list li { margin: 0.4rem 0; }
 
+/* ヘルプページ: PCでも中央寄せ */
+.help-page {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 1rem;
+}
+.help-page .site-header {
+  padding: 1.5rem var(--pad) 0.75rem;
+  text-align: center;
+}
+.help-page .card {
+  margin-left: auto;
+  margin-right: auto;
+}
+.help-page .site-footer {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .error {
   color: #9b1c1c;
   padding: 0.75rem;
@@ -393,6 +758,15 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 
 @media (max-width: 720px) {
+  .pc-only {
+    display: none !important;
+  }
+  .sidebar-jumps {
+    display: none !important;
+  }
+  .matrix-nav.mobile-only {
+    display: block;
+  }
   .acc-toolbar.mobile-only {
     display: flex;
   }
@@ -452,6 +826,25 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
     border-top: 1px solid rgba(11, 61, 46, 0.08);
   }
 
+  .acc-nested.acc-mobile-only {
+    margin-top: 0.35rem;
+  }
+  .acc-nested.acc-mobile-only > .acc-toggle {
+    display: flex;
+    width: 100%;
+    margin: 0;
+    padding: 0.65rem 0;
+    min-height: var(--touch);
+  }
+  .acc-nested.acc-mobile-only.is-closed > .acc-body {
+    display: none;
+  }
+  .acc-nested.acc-mobile-only.is-open > .acc-body {
+    display: block;
+    padding: 0.35rem 0 0.25rem;
+    border-top: 1px solid rgba(11, 61, 46, 0.08);
+  }
+
   .cta-row { flex-direction: column; }
   .btn { width: 100%; }
 
@@ -495,6 +888,54 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   .acc-chevron {
     display: none;
   }
+
+  /* PCでも折りたたみ対象（登場人物の役割説明など） */
+  .acc.acc-pc {
+    padding-top: 0.25rem;
+    padding-bottom: 0.35rem;
+  }
+  .acc.acc-pc .acc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: calc(100% + 2 * var(--pad));
+    margin: 0 calc(var(--pad) * -1);
+    padding: 0.75rem var(--pad);
+    cursor: pointer;
+    pointer-events: auto;
+    min-height: var(--touch);
+  }
+  .acc.acc-pc .acc-hint {
+    display: block;
+    flex: 1;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .acc.acc-pc .acc-chevron {
+    display: block;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-right: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    flex: 0 0 auto;
+  }
+  .acc.acc-pc.is-open .acc-chevron {
+    transform: rotate(-135deg);
+    margin-top: 0.25rem;
+  }
+  .acc.acc-pc.is-closed .acc-body {
+    display: none;
+  }
+  .acc.acc-pc.is-open .acc-body {
+    display: block;
+    padding: 0 0 0.65rem;
+    border-top: 1px solid rgba(11, 61, 46, 0.08);
+  }
 }
 
 @media (max-width: 380px) {
@@ -508,3 +949,4 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
     display: none;
   }
 }
+

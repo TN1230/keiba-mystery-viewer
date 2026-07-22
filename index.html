@@ -4,97 +4,155 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>競馬AI ミステリー予想（閲覧）</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="brand" id="brandName">競馬AI ミステリー予想</div>
-    <p class="tagline">本日の予想サマリー（閲覧専用）</p>
-    <p class="updated" id="updatedAt">更新を読み込み中…</p>
-    <p class="nav-links"><a href="help.html">項目説明ヘルプ</a></p>
-  </header>
+  <div class="layout">
+    <aside class="site-sidebar" aria-label="サイト情報">
+      <div class="brand-logo" id="brandName">
+        <img src="assets/logo_sidebar.svg" alt="競馬AI ミステリー予想" class="brand-logo-img" width="214" height="72" decoding="async" />
+      </div>
+      <p class="responsible-gaming">馬券は自己責任で。無理な買い方はやめましょう</p>
+      <p class="tagline">本日の予想サマリー（閲覧専用）</p>
+      <p class="updated" id="updatedAt">更新を読み込み中…</p>
+      <p class="update-note">※数値、予想印は更新ごとに変動する場合があります。レース直前予想通知機能もご活用されるなど、最新の更新情報を参照してください</p>
+      <p class="nav-links">
+        <a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ</a>
+      </p>
+      <section class="sidebar-jumps" id="sidebarJumps" aria-labelledby="sidebarJumpsTitle">
+        <h2 class="sidebar-jumps-title" id="sidebarJumpsTitle">レースジャンプ</h2>
+        <div id="venueTabsSidebar" class="tabs sidebar-venue-tabs" role="tablist" aria-label="会場"></div>
+        <p class="hint jump-legend sidebar-jump-legend">青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+        <div id="jumpButtonsSidebar" class="jump-row sidebar-jump-row"></div>
+      </section>
+      <section class="sidebar-subscribe" aria-labelledby="subscribeTitle">
+        <h2 class="sidebar-subscribe-title" id="subscribeTitle">配信を受け取る</h2>
+        <p class="sidebar-subscribe-hint">発走直前予想などの通知はこちらから登録できます。</p>
+        <div class="cta-row sidebar-cta">
+          <div class="sidebar-discord-wrap">
+            <a class="btn btn-discord" id="discordCta" href="#" target="_blank" rel="noopener">Discord配信に参加</a>
+            <p class="sidebar-limited-note">※期間・人数限定</p>
+          </div>
+        </div>
+        <p class="update-timing" aria-label="主な更新タイミング">【主な更新タイミング】
+・開催日早朝6時頃（全レース一斉）
+・発走8分前前後（全レース）
+・発走1時間前頃（重賞のみ）
+※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください</p>
+      </section>
+    </aside>
 
-  <div class="acc-toolbar mobile-only" id="accToolbar" hidden>
-    <button type="button" class="acc-tool-btn" id="accOpenAll">すべて開く</button>
-    <button type="button" class="acc-tool-btn" id="accCloseSecondary">説明・登録を閉じる</button>
+    <div class="site-main" id="siteMain">
+      <div
+        id="dayClosedOverlay"
+        class="day-closed-overlay"
+        hidden
+        aria-hidden="true"
+        role="status"
+      >
+        <p class="day-closed-message">
+          本日の予想公開は終了しました。<br />
+          次回開催日もよろしくお願いします
+        </p>
+      </div>
+      <div class="acc-toolbar mobile-only" id="accToolbar" hidden>
+        <button type="button" class="acc-tool-btn" id="accOpenAll">すべて開く</button>
+        <button type="button" class="acc-tool-btn" id="accCloseSecondary">説明を閉じる</button>
+      </div>
+
+      <section class="card logic-cast acc acc-pc" data-acc="logic" data-default="closed">
+        <button type="button" class="acc-toggle" aria-expanded="false">
+          <span class="acc-title">登場人物の役割説明</span>
+          <span class="acc-hint">ホームズほか各思考</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <div class="logic-blurbs">
+            <p class="logic-blurb is-meta"><strong>ホームズ</strong> … 全体メタ。各探偵の印を横断して「このレースは誰の思考を本線にするか」を決め、ホームズ指数で当日の優先度も付ける。</p>
+            <p class="logic-blurb"><strong>ワトソン</strong> … 手堅さ・安定志向。勝ちやすさや再現性を重視し、崩れにくい本線を組み立てる。派手な穴狙いより、堅実に残せる印付けが役割。</p>
+            <p class="logic-blurb"><strong>アイリーン</strong> … 妙味・回収志向。オッズ妙味を軸に勝負強さを見極め、本勝負／絞り推し／様子見／勝負見送りで買う強さを切り替える。</p>
+            <p class="logic-blurb"><strong>モーリアティ</strong> … 重賞特化。重賞だけで本命線／均衡線／波乱線のシナリオを立て、どの展開想定を本線にするかを決めて推奨買い目へ落とす。</p>
+            <p class="logic-blurb"><strong>ハンター</strong> … 夏競馬特化。6〜9月の札幌・函館・福島・新潟・小倉（非重賞・新馬以外）向けに、夏のローカル条件へ寄せたモデルで印を付ける。</p>
+            <p class="logic-blurb"><strong>ホプキンス</strong> … 新馬戦特化。実績の薄い新馬戦だけを対象に、新馬向けモデルで評価して印を付ける（未勝利戦は対象外）。</p>
+          </div>
+          <p class="hint">マトリクスの「ホームズ推」＝ホームズによる推奨ロジック。詳細は <a href="help.html" target="_blank" rel="noopener noreferrer">ヘルプ</a>。</p>
+        </div>
+      </section>
+
+      <section class="card acc" data-acc="top5" data-default="open">
+        <button type="button" class="acc-toggle" aria-expanded="true">
+          <span class="acc-title">本日の優先候補（Top5）</span>
+          <span class="acc-hint">買う候補の入口</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <ol id="top5List" class="top5"></ol>
+        </div>
+      </section>
+
+      <section class="card acc" data-acc="matrix" data-default="open">
+        <button type="button" class="acc-toggle" aria-expanded="true">
+          <span class="acc-title">会場マトリクス</span>
+          <span class="acc-hint">ホームズ推・各印</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <div class="matrix-nav mobile-only" id="matrixNavMobile">
+            <div id="venueTabs" class="tabs" role="tablist" aria-label="会場"></div>
+            <div class="jump-block" id="jumpBlockMain">
+              <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+              <div id="jumpButtons" class="jump-row"></div>
+            </div>
+          </div>
+          <div class="acc acc-nested acc-mobile-only" data-acc="matrix-list" data-default="closed">
+            <button type="button" class="acc-toggle" aria-expanded="false">
+              <span class="acc-title">レース一覧</span>
+              <span class="acc-hint">ホームズ推・各印</span>
+              <span class="acc-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="acc-body">
+              <div id="matrixWrap"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card acc" id="raceDetailCard" data-acc="race" data-default="open">
+        <button type="button" class="acc-toggle" aria-expanded="true">
+          <span class="acc-title">レース要約</span>
+          <span class="acc-hint">印・PDF</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <div id="raceDetail" class="race-detail">
+            <p class="hint">マトリクスの行またはジャンプボタンでレースを選ぶと表示されます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card acc acc-pc" id="shutubaCard" data-acc="shutuba" data-default="closed">
+        <button type="button" class="acc-toggle" aria-expanded="false">
+          <span class="acc-title">UI出馬表</span>
+          <span class="acc-hint">枠・脚質・印</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <div id="shutubaDetail" class="shutuba-detail">
+            <p class="hint">レースを選ぶと出馬表が表示されます。</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <p>本ページは閲覧専用です。予想の自動実行やオッズ取得は行いません。</p>
+        <p><a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ（印・評価・PDFの見方）</a></p>
+      </footer>
+    </div>
   </div>
-
-  <section class="card acc" data-acc="subscribe" data-default="closed">
-    <button type="button" class="acc-toggle" aria-expanded="false">
-      <span class="acc-title">配信を受け取る</span>
-      <span class="acc-hint">LINE / Discord</span>
-      <span class="acc-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="acc-body">
-      <p class="hint">発走直前予想などの通知はこちらから登録できます。</p>
-      <div class="cta-row">
-        <a class="btn btn-line" id="lineCta" href="#" target="_blank" rel="noopener">LINE公式を友だち追加</a>
-        <a class="btn btn-discord" id="discordCta" href="#" target="_blank" rel="noopener">Discord配信に参加</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="card logic-cast acc" data-acc="logic" data-default="closed">
-    <button type="button" class="acc-toggle" aria-expanded="false">
-      <span class="acc-title">探偵ロジック</span>
-      <span class="acc-hint">ホームズほか各思考</span>
-      <span class="acc-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="acc-body">
-      <div class="logic-blurbs">
-        <p class="logic-blurb is-meta"><strong>ホームズ</strong> … 全体メタ。各探偵の印を横断して「このレースは誰の思考を本線にするか」を決め、ホームズ指数で当日の優先度も付ける。</p>
-        <p class="logic-blurb"><strong>ワトソン</strong> … 手堅さ・安定志向。勝ちやすさや再現性を重視し、崩れにくい本線を組み立てる。派手な穴狙いより、堅実に残せる印付けが役割。</p>
-        <p class="logic-blurb"><strong>アイリーン</strong> … 妙味・回収志向。オッズ妙味を軸に勝負強さを見極め、本勝負／絞り推し／様子見／勝負見送りで買う強さを切り替える。</p>
-        <p class="logic-blurb"><strong>モーリアティ</strong> … 重賞特化。重賞だけで本命線／均衡線／波乱線のシナリオを立て、どの展開想定を本線にするかを決めて推奨買い目へ落とす。</p>
-        <p class="logic-blurb"><strong>ハンター</strong> … 夏競馬特化。6〜9月の札幌・函館・福島・新潟・小倉（非重賞・新馬以外）向けに、夏のローカル条件へ寄せたモデルで印を付ける。</p>
-        <p class="logic-blurb"><strong>ホプキンス</strong> … 新馬戦特化。実績の薄い新馬戦だけを対象に、新馬向けモデルで評価して印を付ける（未勝利戦は対象外）。</p>
-      </div>
-      <p class="hint">マトリクスの「ホームズ推」＝ホームズによる推奨ロジック。詳細は <a href="help.html">ヘルプ</a>。</p>
-    </div>
-  </section>
-
-  <section class="card acc" data-acc="top5" data-default="open">
-    <button type="button" class="acc-toggle" aria-expanded="true">
-      <span class="acc-title">本日の優先候補（Top5）</span>
-      <span class="acc-hint">買う候補の入口</span>
-      <span class="acc-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="acc-body">
-      <ol id="top5List" class="top5"></ol>
-    </div>
-  </section>
-
-  <section class="card acc" data-acc="matrix" data-default="open">
-    <button type="button" class="acc-toggle" aria-expanded="true">
-      <span class="acc-title">会場マトリクス</span>
-      <span class="acc-hint">ホームズ推・各印</span>
-      <span class="acc-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="acc-body">
-      <div id="venueTabs" class="tabs" role="tablist"></div>
-      <div id="matrixWrap"></div>
-      <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
-      <div id="jumpButtons" class="jump-row"></div>
-    </div>
-  </section>
-
-  <section class="card acc" id="raceDetailCard" data-acc="race" data-default="open">
-    <button type="button" class="acc-toggle" aria-expanded="true">
-      <span class="acc-title">レース要約</span>
-      <span class="acc-hint">印・PDF</span>
-      <span class="acc-chevron" aria-hidden="true"></span>
-    </button>
-    <div class="acc-body">
-      <div id="raceDetail" class="race-detail">
-        <p class="hint">マトリクスの行またはジャンプボタンでレースを選ぶと表示されます。</p>
-      </div>
-    </div>
-  </section>
-
-  <footer class="site-footer">
-    <p>本ページは閲覧専用です。予想の自動実行やオッズ取得は行いません。</p>
-    <p><a href="help.html">項目説明ヘルプ（印・評価・PDFの見方）</a></p>
-  </footer>
 
   <script src="config.js"></script>
   <script src="app.js"></script>

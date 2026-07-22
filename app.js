@@ -9,15 +9,16 @@
   const $ = (id) => document.getElementById(id);
 
   function setCtas() {
-    const line = $("lineCta");
     const disc = $("discordCta");
-    if (cfg.BRAND_NAME) $("brandName").textContent = cfg.BRAND_NAME;
-    if (cfg.LINE_FRIEND_URL && !String(cfg.LINE_FRIEND_URL).includes("YOUR_")) {
-      line.href = cfg.LINE_FRIEND_URL;
-    } else {
-      line.setAttribute("aria-disabled", "true");
-      line.title = "config.js の LINE_FRIEND_URL を設定してください";
+    if (cfg.BRAND_NAME) {
+      const brand = $("brandName");
+      if (brand) {
+        const img = brand.querySelector("img.brand-logo-img");
+        if (img) img.alt = cfg.BRAND_NAME;
+        else brand.textContent = cfg.BRAND_NAME;
+      }
     }
+    if (!disc) return;
     if (cfg.DISCORD_INVITE_URL && !String(cfg.DISCORD_INVITE_URL).includes("YOUR_")) {
       disc.href = cfg.DISCORD_INVITE_URL;
     } else {
@@ -61,12 +62,12 @@
     }
   }
 
-  function renderTabs() {
-    const tabs = $("venueTabs");
-    tabs.innerHTML = "";
+  function fillVenueTabs(container) {
+    if (!container) return;
+    container.innerHTML = "";
     const list = venues();
     if (!list.length) {
-      tabs.innerHTML = "<span class='hint'>会場データがありません</span>";
+      container.innerHTML = "<span class='hint'>会場データがありません</span>";
       return;
     }
     if (!state.place || !list.some((v) => v.place === state.place)) {
@@ -77,18 +78,73 @@
       b.type = "button";
       b.className = "tab" + (v.place === state.place ? " active" : "");
       b.textContent = v.place;
+      b.setAttribute("aria-pressed", v.place === state.place ? "true" : "false");
       b.addEventListener("click", () => {
         state.place = v.place;
         renderTabs();
         renderMatrix();
         renderJumps();
       });
-      tabs.appendChild(b);
+      container.appendChild(b);
     }
+  }
+
+  function renderTabs() {
+    fillVenueTabs($("venueTabs"));
+    fillVenueTabs($("venueTabsSidebar"));
   }
 
   function currentVenue() {
     return venues().find((v) => v.place === state.place) || null;
+  }
+
+  function matrixSuiLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s || s === "-") return "-";
+    const map = {
+      ワ: "ワトソン",
+      アイ: "アイリーン",
+      モ: "モーリアティ",
+      モリ: "モーリアティ",
+      ハ: "ハンター",
+      ホプ: "ホプキンス",
+      "ハ/ホプ": "ハンター",
+    };
+    return map[s] || s;
+  }
+
+  function thirdDetectiveLabel(row) {
+    const mapPresence = (raw) => {
+      const s = String(raw || "").trim();
+      if (!s || s === "-") return "";
+      if (s === "モーリアティ" || s === "モリ" || s.includes("モーリ")) return "モーリアティ";
+      if (s === "ホプキンス" || s === "ホプ" || s.includes("ホプキンス") || s.includes("新馬")) return "ホプキンス";
+      if (s === "ハンター" || s === "ハ" || s.includes("ハンター") || s.includes("夏")) return "ハンター";
+      // 旧スナップショットの買/様子ラベルはモーリアティ列由来とみなす
+      if (s.includes("買") || s.includes("様子") || s.includes("見送")) return "モーリアティ";
+      return "";
+    };
+
+    const cur = row && row["第3探偵"];
+    const fromCur = mapPresence(cur);
+    if (fromCur) return fromCur;
+
+    const candidates = [
+      row && row["モ"],
+      row && (row["ハ/ホプ"] || row["ハ"] || row["ホプ"]),
+      row && row.cells && (row.cells["モ"] || row.cells["モーリアティ"]),
+      row && row.cells && (row.cells["ハ/ホプ"] || row.cells["ハンター"] || row.cells["ホプキンス"]),
+    ];
+    for (const c of candidates) {
+      const n = mapPresence(c);
+      if (n) return n;
+    }
+    return cur || "-";
+  }
+
+  function matrixCell(row, fullKey, shortKey) {
+    const v = row && (row[fullKey] ?? row[shortKey]);
+    return v == null || v === "" ? "-" : v;
   }
 
   function renderMatrix() {
@@ -98,16 +154,15 @@
       wrap.innerHTML = "<p class='hint'>マトリクスなし</p>";
       return;
     }
-    const cols = ["race", "dev", "sui", "holmes_index", "ワ", "アイ", "モ", "ハ/ホプ"];
+    const cols = ["race", "dev", "sui", "holmes_index", "ワトソン", "アイリーン", "第3探偵"];
     const labels = {
       race: "Race",
       dev: "偏差",
       sui: "ホームズ推",
       holmes_index: "ホームズ指数",
-      ワ: "ワトソン",
-      アイ: "アイリーン",
-      モ: "モーリアティ",
-      "ハ/ホプ": "ハンター/ホプキンス",
+      ワトソン: "ワトソン",
+      アイリーン: "アイリーン",
+      第3探偵: "第3探偵",
     };
     let table = "<div class='matrix-desktop'><div class='table-wrap'><table class='matrix'><thead><tr>";
     for (const c of cols) table += `<th>${labels[c] || c}</th>`;
@@ -115,9 +170,19 @@
     let cards = "<div class='matrix-mobile'>";
     for (const row of v.matrix) {
       const sel = String(row.race_id) === String(state.raceId) ? " selected" : "";
+      const third = thirdDetectiveLabel(row);
+      const watson = matrixCell(row, "ワトソン", "ワ");
+      const irene = matrixCell(row, "アイリーン", "アイ");
+      const sui = matrixSuiLabel(row.sui);
       table += `<tr class="${sel}" data-rid="${row.race_id}">`;
       for (const c of cols) {
-        table += `<td>${escapeHtml(row[c] ?? "-")}</td>`;
+        let val = "-";
+        if (c === "第3探偵") val = third;
+        else if (c === "ワトソン") val = watson;
+        else if (c === "アイリーン") val = irene;
+        else if (c === "sui") val = sui;
+        else val = row[c] ?? "-";
+        table += `<td>${escapeHtml(val)}</td>`;
       }
       table += "</tr>";
       cards += `
@@ -125,12 +190,11 @@
           <p class="matrix-card-title">${escapeHtml(row.race || "-")}</p>
           <div class="matrix-card-grid">
             <div><span>偏差</span><strong>${escapeHtml(row.dev ?? "-")}</strong></div>
-            <div><span>ホームズ推</span><strong>${escapeHtml(row.sui ?? "-")}</strong></div>
+            <div><span>ホームズ推</span><strong>${escapeHtml(sui)}</strong></div>
             <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
-            <div><span>ワトソン</span><strong>${escapeHtml(row["ワ"] ?? "-")}</strong></div>
-            <div><span>アイリーン</span><strong>${escapeHtml(row["アイ"] ?? "-")}</strong></div>
-            <div><span>モーリアティ</span><strong>${escapeHtml(row["モ"] ?? "-")}</strong></div>
-            <div><span>ハンター/ホプキンス</span><strong>${escapeHtml(row["ハ/ホプ"] ?? "-")}</strong></div>
+            <div><span>ワトソン</span><strong>${escapeHtml(watson)}</strong></div>
+            <div><span>アイリーン</span><strong>${escapeHtml(irene)}</strong></div>
+            <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(third)}</strong></div>
           </div>
         </button>`;
     }
@@ -138,7 +202,7 @@
     cards += "</div>";
     wrap.innerHTML = table + cards;
     wrap.querySelectorAll("[data-rid]").forEach((el) => {
-      el.addEventListener("click", () => selectRace(el.getAttribute("data-rid"), state.place));
+      el.addEventListener("click", () => selectRace(el.getAttribute("data-rid"), state.place, { scroll: false }));
     });
   }
 
@@ -150,34 +214,41 @@
   }
 
   function renderJumps() {
-    const box = $("jumpButtons");
-    box.innerHTML = "";
+    const boxes = [$("jumpButtons"), $("jumpButtonsSidebar")].filter(Boolean);
     const v = currentVenue();
-    if (!v) return;
-    for (const r of v.races || []) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = jumpClass(r.holmes_index_rank);
-      const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
-      b.textContent = `${rn}R`;
-      const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
-        ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
-        : `${r.place} ${rn}R`;
-      b.title = tip;
-      b.addEventListener("click", () => selectRace(r.race_id, state.place));
-      box.appendChild(b);
+    for (const box of boxes) {
+      box.innerHTML = "";
+      if (!v) continue;
+      for (const r of v.races || []) {
+        const b = document.createElement("button");
+        b.type = "button";
+        const selected = String(r.race_id) === String(state.raceId);
+        b.className = jumpClass(r.holmes_index_rank) + (selected ? " is-selected" : "");
+        const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
+        b.textContent = `${rn}R`;
+        b.setAttribute("aria-pressed", selected ? "true" : "false");
+        const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
+          ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
+          : `${r.place} ${rn}R`;
+        b.title = tip;
+        b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
+        box.appendChild(b);
+      }
     }
   }
 
-  function selectRace(raceId, place) {
+  function selectRace(raceId, place, opts = {}) {
     state.raceId = raceId;
     if (place) state.place = place;
     renderTabs();
     renderMatrix();
     renderJumps();
     renderDetail();
+    renderShutuba();
     openAccordion("race");
-    $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (opts.scroll !== false) {
+      $("raceDetailCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function renderDetail() {
@@ -209,6 +280,59 @@
     box.innerHTML = html;
   }
 
+  function markHonmeiClass(col) {
+    if (col === "ワトソン") return "mark-honmei mark-w";
+    if (col === "アイリーン") return "mark-honmei mark-i";
+    if (col === "モーリアティ") return "mark-honmei mark-m";
+    return "mark-honmei mark-h";
+  }
+
+  function renderShutuba() {
+    const box = $("shutubaDetail");
+    if (!box) return;
+    const found = findRace(state.raceId);
+    if (!found) {
+      box.innerHTML = "<p class='hint'>レースを選ぶと出馬表が表示されます。</p>";
+      return;
+    }
+    const shutuba = found.race.shutuba;
+    if (!shutuba || !Array.isArray(shutuba.rows) || !shutuba.rows.length) {
+      box.innerHTML =
+        "<p class='hint'>このレースの出馬表はまだ公開されていません（本体アプリ再公開後に表示されます）。</p>";
+      return;
+    }
+    const cols = Array.isArray(shutuba.columns) ? shutuba.columns : [];
+    const markCols = new Set(Array.isArray(shutuba.mark_columns) ? shutuba.mark_columns : []);
+    let html = '<div class="table-wrap"><table class="shutuba"><thead><tr>';
+    for (const c of cols) {
+      html += `<th>${escapeHtml(c)}</th>`;
+    }
+    html += "</tr></thead><tbody>";
+    for (const row of shutuba.rows) {
+      const st = row._style || {};
+      const honmei = st.honmei || {};
+      html += `<tr${st.cancel ? ' class="is-cancel"' : ""}>`;
+      for (const c of cols) {
+        const classes = [];
+        let styleAttr = "";
+        if (c === "枠番" && st.frame_bg) {
+          classes.push("frame-cell");
+          styleAttr = ` style="background:${escapeAttr(st.frame_bg)};color:${escapeAttr(st.frame_fg || "#000")}"`;
+        }
+        if (st.cancel && (c === "馬名" || c === "単勝")) classes.push("cancel-text");
+        if (markCols.has(c) && honmei[c]) classes.push(markHonmeiClass(c));
+        const cls = classes.length ? ` class="${classes.join(" ")}"` : "";
+        html += `<td${cls}${styleAttr}>${escapeHtml(row[c] ?? "")}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table></div>";
+    if (!shutuba.predicted) {
+      html += '<p class="hint">予想前の出馬表です（印列は予想後に表示されます）。</p>';
+    }
+    box.innerHTML = html;
+  }
+
   function escapeHtml(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -220,13 +344,50 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  function formatUpdatedAtLabel(raw) {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    // ISO / "YYYY-MM-DD HH:MM:SS" / "YYYY-MM-DDTHH:MM:SS(+TZ)"
+    const m = s.match(
+      /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
+    );
+    if (m) {
+      const datePart = m[1];
+      const timePart = m[2] || "";
+      if (timePart) return `📅${datePart}　⏰${timePart}`;
+      return `📅${datePart}`;
+    }
+    return s;
+  }
+
+  function isDayClosedSnapshot(data) {
+    if (!data || typeof data !== "object") return false;
+    if (data.cleared === true) return true;
+    const venues = Array.isArray(data.venues) ? data.venues : [];
+    const n = Number(data.race_count || 0);
+    return n === 0 && venues.length === 0;
+  }
+
+  function setDayClosedOverlay(on) {
+    const overlay = $("dayClosedOverlay");
+    document.body.classList.toggle("is-day-closed", !!on);
+    if (!overlay) return;
+    overlay.hidden = !on;
+    overlay.setAttribute("aria-hidden", on ? "false" : "true");
+  }
+
   function applyData(data, { flash = false } = {}) {
     const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
     const el = $("updatedAt");
-    const text = data.updated_at
-      ? `最終更新: ${data.updated_at}（開催日 ${data.schedule_date || "-"}）`
-      : "更新時刻不明";
+    const closed = isDayClosedSnapshot(data);
+    setDayClosedOverlay(closed);
+    const stamped = formatUpdatedAtLabel(data.updated_at);
+    const text = closed
+      ? `本日の予想公開は終了しました（開催日 ${data.schedule_date || "-"}）`
+      : stamped
+        ? `最終更新: ${stamped}（開催日 ${data.schedule_date || "-"}）`
+        : "更新時刻不明";
     el.textContent = text;
     if (flash && prevUpdated && data.updated_at && prevUpdated !== data.updated_at) {
       el.classList.add("just-updated");
@@ -236,7 +397,10 @@
     renderTabs();
     renderMatrix();
     renderJumps();
-    if (state.raceId) renderDetail();
+    if (state.raceId) {
+      renderDetail();
+      renderShutuba();
+    }
   }
 
   async function loadSnapshot({ silent = false } = {}) {
@@ -266,6 +430,19 @@
     return ACC_MQ.matches;
   }
 
+  function isPcCollapsible(section) {
+    return !!(section && section.classList.contains("acc-pc"));
+  }
+
+  function isMobileOnlyAcc(section) {
+    return !!(section && section.classList.contains("acc-mobile-only"));
+  }
+
+  function canToggleAcc(section) {
+    if (isMobileOnlyAcc(section)) return isMobileAcc();
+    return isMobileAcc() || isPcCollapsible(section);
+  }
+
   function readAccPrefs() {
     try {
       return JSON.parse(sessionStorage.getItem(ACC_STORAGE_KEY) || "{}") || {};
@@ -284,9 +461,9 @@
     if (!section) return;
     section.classList.toggle("is-open", open);
     section.classList.toggle("is-closed", !open);
-    const btn = section.querySelector(".acc-toggle");
+    const btn = section.querySelector(":scope > .acc-toggle");
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
-    if (persist && isMobileAcc()) {
+    if (persist && canToggleAcc(section)) {
       const key = section.getAttribute("data-acc");
       if (!key) return;
       const prefs = readAccPrefs();
@@ -307,7 +484,7 @@
     document.querySelectorAll(".acc[data-acc]").forEach((section) => {
       const key = section.getAttribute("data-acc");
       let open;
-      if (!isMobileAcc()) {
+      if (!isMobileAcc() && !isPcCollapsible(section)) {
         open = true;
       } else if (Object.prototype.hasOwnProperty.call(prefs, key)) {
         open = !!prefs[key];
@@ -321,10 +498,10 @@
 
   function initAccordion() {
     document.querySelectorAll(".acc[data-acc]").forEach((section) => {
-      const btn = section.querySelector(".acc-toggle");
+      const btn = section.querySelector(":scope > .acc-toggle");
       if (!btn) return;
       btn.addEventListener("click", () => {
-        if (!isMobileAcc()) return;
+        if (!canToggleAcc(section)) return;
         const next = !section.classList.contains("is-open");
         setAccordionOpen(section, next, true);
       });
