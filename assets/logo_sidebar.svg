@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 72" width="214" height="72" role="img" aria-label="競馬AI ミステリー予想" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a017"/>
+      <stop offset="100%" stop-color="#a67c00"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4, 12)">
+    <circle cx="24" cy="24" r="22" fill="none" stroke="url(#gold)" stroke-width="1.8"/>
+    <circle cx="24" cy="24" r="16" fill="none" stroke="#a67c00" stroke-width="1" stroke-dasharray="3 2" opacity="0.75"/>
+    <circle cx="24" cy="22" r="7" fill="none" stroke="url(#gold)" stroke-width="1.6"/>
+    <path d="M29 27 L36 36" stroke="url(#gold)" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M20 26 Q24 30 28 26 Q24 32 20 26" fill="none" stroke="#a67c00" stroke-width="1.2"/>
+    <ellipse cx="24" cy="42" rx="10" ry="3" fill="#c0392b" opacity="0.28"/>
+  </g>
+  <text x="58" y="34" font-family="Yu Mincho, Hiragino Mincho ProN, MS Mincho, serif" font-size="22" font-weight="700" fill="#0b3d2e">競馬AI</text>
+  <text x="58" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="600" fill="#a67c00" letter-spacing="3.4">MYSTERY</text>
+  <text x="58" y="58" font-family="Yu Gothic UI, Hiragino Sans, Meiryo, sans-serif" font-size="11" fill="#5c5c5c" letter-spacing="2.6">ミステリー予想</text>
+  <rect x="58" y="40" width="152" height="1.5" fill="#a67c00" opacity="0.55"/>
+</svg>
