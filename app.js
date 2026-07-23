@@ -21,7 +21,10 @@
     if (!disc) return;
     if (cfg.DISCORD_INVITE_URL && !String(cfg.DISCORD_INVITE_URL).includes("YOUR_")) {
       disc.href = cfg.DISCORD_INVITE_URL;
+      disc.removeAttribute("aria-disabled");
+      disc.removeAttribute("title");
     } else {
+      disc.href = "#";
       disc.setAttribute("aria-disabled", "true");
       disc.title = "config.js の DISCORD_INVITE_URL を設定してください";
     }

@@ -105,9 +105,16 @@ body.is-day-closed .site-main {
   /* 本編（白レイヤー下のリンク等）は操作不可 */
   pointer-events: none;
 }
-body.is-day-closed .site-sidebar,
-body.is-day-closed .site-sidebar a,
-body.is-day-closed .site-sidebar button {
+body.is-day-closed .site-sidebar {
+  position: relative;
+  z-index: 9999;
+  pointer-events: auto;
+  /* 白レイヤーが被っても薄く見えないよう不透明に */
+  background: #fffcf5;
+  backdrop-filter: none;
+}
+body.is-day-closed .site-sidebar a:not([aria-disabled="true"]),
+body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   position: relative;
   z-index: 9999;
   pointer-events: auto !important;
@@ -476,10 +483,26 @@ body.is-day-closed .site-sidebar button {
   text-align: center;
 }
 .btn-line { background: var(--line); }
-.btn-discord { background: var(--discord); }
+.btn-discord {
+  background: var(--discord);
+  color: #fff;
+  opacity: 1;
+  box-shadow: 0 2px 0 rgba(47, 49, 54, 0.35);
+}
+.btn-discord:not([aria-disabled="true"]):hover {
+  background: #4752c4;
+}
+body.is-day-closed .btn-discord:not([aria-disabled="true"]) {
+  opacity: 1;
+  background: #5865f2;
+  box-shadow:
+    0 0 0 2px rgba(88, 101, 242, 0.35),
+    0 4px 14px rgba(88, 101, 242, 0.4);
+}
 .btn[aria-disabled="true"] {
   opacity: 0.45;
   pointer-events: none;
+  box-shadow: none;
 }
 
 .top5 { margin: 0; padding-left: 1.2rem; }
