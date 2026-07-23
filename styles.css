@@ -72,19 +72,17 @@ body {
   border-bottom: 1px solid rgba(11, 61, 46, 0.1);
   background: rgba(255, 252, 245, 0.92);
   backdrop-filter: blur(6px);
-  /* Discord 等を白レイヤーより常に手前・操作可能にする */
-  pointer-events: auto;
 }
 .site-main {
   min-width: 0;
   position: relative;
   z-index: 1;
   isolation: isolate;
-  /* 白レイヤーを本編カラム内に閉じ込める */
   overflow-x: clip;
+  contain: paint;
 }
 
-/* 開催日終了後: 右ペイン（本編）のみ半透明白レイヤー。サイドバーにはかからない */
+/* 開催日終了後: 右ペインのみ白レイヤー（見た目）。クリックは本編だけ無効化しサイドバーは常に有効 */
 .day-closed-overlay {
   display: none;
   position: absolute;
@@ -94,8 +92,8 @@ body {
   justify-content: center;
   padding: clamp(1.25rem, 4vw, 2.5rem);
   background: rgba(255, 255, 255, 0.5);
-  pointer-events: auto;
-  /* サイドバー側へはみ出さない */
+  /* ヒットテストを取らない → サイドバーへクリックが届く */
+  pointer-events: none;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -104,18 +102,15 @@ body.is-day-closed .day-closed-overlay {
 }
 body.is-day-closed .site-main {
   overflow: hidden;
+  /* 本編（白レイヤー下のリンク等）は操作不可 */
+  pointer-events: none;
 }
-body.is-day-closed .site-sidebar {
-  z-index: 200;
-}
-/* モバイル: 縦積み時もサイドバーを手前に固定し Discord 等を操作可能に */
-@media (max-width: 720px) {
-  body.is-day-closed .site-sidebar {
-    position: sticky;
-    top: 0;
-    z-index: 200;
-    box-shadow: 0 8px 20px rgba(26, 26, 26, 0.08);
-  }
+body.is-day-closed .site-sidebar,
+body.is-day-closed .site-sidebar a,
+body.is-day-closed .site-sidebar button {
+  position: relative;
+  z-index: 9999;
+  pointer-events: auto !important;
 }
 .day-closed-message {
   margin: 0;
