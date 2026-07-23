@@ -440,6 +440,26 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
 
 .hint { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
 
+.overview-body {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+.overview-body p {
+  margin: 0;
+  font-size: clamp(0.88rem, 3.4vw, 0.95rem);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.overview-body a {
+  color: var(--accent);
+  font-weight: 600;
+}
+.overview-note {
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
 .logic-blurbs {
   display: grid;
   gap: 0.55rem;
