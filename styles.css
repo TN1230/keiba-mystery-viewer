@@ -488,9 +488,29 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   color: #fff;
   opacity: 1;
   box-shadow: 0 2px 0 rgba(47, 49, 54, 0.35);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.12s ease,
+    filter 0.15s ease;
 }
 .btn-discord:not([aria-disabled="true"]):hover {
   background: #4752c4;
+  filter: brightness(1.06);
+  box-shadow:
+    0 3px 0 rgba(47, 49, 54, 0.4),
+    0 6px 16px rgba(88, 101, 242, 0.35);
+  transform: translateY(-1px);
+}
+.btn-discord:not([aria-disabled="true"]):active {
+  background: #3c45a5;
+  filter: brightness(0.96);
+  box-shadow: 0 1px 0 rgba(47, 49, 54, 0.45);
+  transform: translateY(1px);
+}
+.btn-discord:not([aria-disabled="true"]):focus-visible {
+  outline: 2px solid #5865f2;
+  outline-offset: 3px;
 }
 body.is-day-closed .btn-discord:not([aria-disabled="true"]) {
   opacity: 1;
@@ -498,6 +518,18 @@ body.is-day-closed .btn-discord:not([aria-disabled="true"]) {
   box-shadow:
     0 0 0 2px rgba(88, 101, 242, 0.35),
     0 4px 14px rgba(88, 101, 242, 0.4);
+}
+body.is-day-closed .btn-discord:not([aria-disabled="true"]):hover {
+  background: #4752c4;
+  box-shadow:
+    0 0 0 2px rgba(88, 101, 242, 0.45),
+    0 6px 18px rgba(88, 101, 242, 0.5);
+}
+body.is-day-closed .btn-discord:not([aria-disabled="true"]):active {
+  background: #3c45a5;
+  box-shadow:
+    0 0 0 2px rgba(88, 101, 242, 0.3),
+    0 2px 8px rgba(88, 101, 242, 0.35);
 }
 .btn[aria-disabled="true"] {
   opacity: 0.45;
