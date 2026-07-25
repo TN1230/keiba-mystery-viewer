@@ -35,8 +35,9 @@ body {
 }
 
 @media (min-width: 721px) {
-  html,
-  body {
+  /* 本体（.layout）だけ固定。ヘルプページは文書スクロールを維持 */
+  html:has(body:not(.help-page)),
+  body:not(.help-page) {
     height: 100%;
     overflow: hidden;
   }
@@ -947,10 +948,10 @@ table.shutuba .mark-m { color: #7b1fa2; }
 @media (min-width: 721px) {
   html:has(body.help-page),
   body.help-page {
-    height: auto;
+    height: auto !important;
     min-height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 }
 
