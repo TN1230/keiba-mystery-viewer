@@ -3,8 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+  <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
   <title>競馬AI ミステリー予想（閲覧）</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -37,17 +42,56 @@
         </div>
         <p class="update-timing" aria-label="主な更新タイミング">【主な更新タイミング】
 ・開催日早朝6時頃（全レース一斉）
-・発走8分前前後（全レース）
 ・発走1時間前頃（重賞のみ）
+・発走8分前前後（全レース）
 ※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください</p>
       </section>
     </aside>
 
-    <div class="site-main">
+    <div class="site-main" id="siteMain">
+      <div
+        id="dayClosedOverlay"
+        class="day-closed-overlay"
+        hidden
+        aria-hidden="true"
+        role="status"
+      >
+        <p class="day-closed-message">
+          本日の予想公開は終了しました<br />
+          次回開催日もよろしくお願いします
+        </p>
+      </div>
       <div class="acc-toolbar mobile-only" id="accToolbar" hidden>
         <button type="button" class="acc-tool-btn" id="accOpenAll">すべて開く</button>
         <button type="button" class="acc-tool-btn" id="accCloseSecondary">説明を閉じる</button>
       </div>
+
+      <section class="card site-overview acc acc-pc" data-acc="overview" data-default="closed">
+        <button type="button" class="acc-toggle" aria-expanded="false">
+          <span class="acc-title">このサイトの概要</span>
+          <span class="acc-hint">閲覧専用サマリーについて</span>
+          <span class="acc-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="acc-body">
+          <div class="overview-body">
+            <p>
+              本サイトは「競馬AI ミステリー予想」の<strong>閲覧専用</strong>ページです。
+              LINE／Discord でお届けする当日予想のサマリーを、ブラウザ上でまとめて確認できます。
+              予想の作成・編集や馬券購入は行いません。
+            </p>
+            <p>
+              画面では、当日の優先候補（Top5）、開催場ごとのマトリクス、レース要約、印付き出馬表などを表示します。
+              各探偵（ホームズ／ワトソン／アイリーンほか）の役割や項目の意味は「登場人物の役割説明」と
+              <a href="help.html" target="_blank" rel="noopener noreferrer">項目説明ヘルプ</a>を参照してください。
+            </p>
+            <p>
+              数値や予想印は更新のたびに変わることがあります。主な更新は開催日早朝の一斉反映のほか、
+              重賞の発走1時間前頃、全レースの発走8分前前後などです。最新は画面上部の更新時刻と通知をご確認ください。
+            </p>
+            <p class="overview-note">馬券は自己責任で。無理な買い方はやめましょう。</p>
+          </div>
+        </div>
+      </section>
 
       <section class="card logic-cast acc acc-pc" data-acc="logic" data-default="closed">
         <button type="button" class="acc-toggle" aria-expanded="false">
@@ -126,6 +170,12 @@
           <span class="acc-chevron" aria-hidden="true"></span>
         </button>
         <div class="acc-body">
+          <div class="shutuba-toolbar" role="group" aria-label="出馬表の並び替え">
+            <span class="shutuba-sort-label">並び</span>
+            <button type="button" class="shutuba-sort-btn active" data-shutuba-sort="default" aria-pressed="true">デフォルト</button>
+            <button type="button" class="shutuba-sort-btn" data-shutuba-sort="umaban" aria-pressed="false">馬番順</button>
+          </div>
+          <p class="hint shutuba-sort-hint" id="shutubaSortHint">推定3着内率の高い順（本体UIと同じ）</p>
           <div id="shutubaDetail" class="shutuba-detail">
             <p class="hint">レースを選ぶと出馬表が表示されます。</p>
           </div>

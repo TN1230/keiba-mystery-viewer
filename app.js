@@ -1,12 +1,52 @@
 (() => {
   const cfg = window.PUBLIC_VIEWER_CONFIG || {};
+  const SHUTUBA_SORT_KEY = "mystery_viewer_shutuba_sort";
+
+  function loadShutubaSort() {
+    try {
+      const v = localStorage.getItem(SHUTUBA_SORT_KEY);
+      if (v === "umaban" || v === "default") return v;
+    } catch (_) {
+      /* ignore */
+    }
+    return "default";
+  }
+
   const state = {
     data: null,
     place: null,
     raceId: null,
+    shutubaSort: loadShutubaSort(),
   };
 
   const $ = (id) => document.getElementById(id);
+
+  function syncShutubaSortControls() {
+    const sortDefault = state.shutubaSort !== "umaban";
+    document.querySelectorAll("[data-shutuba-sort]").forEach((btn) => {
+      const mode = btn.getAttribute("data-shutuba-sort");
+      const active = sortDefault ? mode === "default" : mode === "umaban";
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    const hint = $("shutubaSortHint");
+    if (hint) {
+      hint.textContent = sortDefault
+        ? "推定3着内率の高い順（本体UIと同じ）"
+        : "馬番の小さい順";
+    }
+  }
+
+  function setShutubaSort(mode) {
+    state.shutubaSort = mode === "umaban" ? "umaban" : "default";
+    try {
+      localStorage.setItem(SHUTUBA_SORT_KEY, state.shutubaSort);
+    } catch (_) {
+      /* ignore */
+    }
+    syncShutubaSortControls();
+    renderShutuba();
+  }
 
   function setCtas() {
     const disc = $("discordCta");
@@ -21,7 +61,10 @@
     if (!disc) return;
     if (cfg.DISCORD_INVITE_URL && !String(cfg.DISCORD_INVITE_URL).includes("YOUR_")) {
       disc.href = cfg.DISCORD_INVITE_URL;
+      disc.removeAttribute("aria-disabled");
+      disc.removeAttribute("title");
     } else {
+      disc.href = "#";
       disc.setAttribute("aria-disabled", "true");
       disc.title = "config.js の DISCORD_INVITE_URL を設定してください";
     }
@@ -287,9 +330,22 @@
     return "mark-honmei mark-h";
   }
 
+  function shutubaRowsForDisplay(rows) {
+    const list = Array.isArray(rows) ? rows.slice() : [];
+    if (state.shutubaSort !== "umaban") return list;
+    return list.sort((a, b) => {
+      const na = Number.parseInt(String(a && a["馬番"] != null ? a["馬番"] : ""), 10);
+      const nb = Number.parseInt(String(b && b["馬番"] != null ? b["馬番"] : ""), 10);
+      const va = Number.isFinite(na) ? na : 999;
+      const vb = Number.isFinite(nb) ? nb : 999;
+      return va - vb;
+    });
+  }
+
   function renderShutuba() {
     const box = $("shutubaDetail");
     if (!box) return;
+    syncShutubaSortControls();
     const found = findRace(state.raceId);
     if (!found) {
       box.innerHTML = "<p class='hint'>レースを選ぶと出馬表が表示されます。</p>";
@@ -308,7 +364,7 @@
       html += `<th>${escapeHtml(c)}</th>`;
     }
     html += "</tr></thead><tbody>";
-    for (const row of shutuba.rows) {
+    for (const row of shutubaRowsForDisplay(shutuba.rows)) {
       const st = row._style || {};
       const honmei = st.honmei || {};
       html += `<tr${st.cancel ? ' class="is-cancel"' : ""}>`;
@@ -331,6 +387,13 @@
       html += '<p class="hint">予想前の出馬表です（印列は予想後に表示されます）。</p>';
     }
     box.innerHTML = html;
+  }
+
+  function initShutubaSortControls() {
+    document.querySelectorAll("[data-shutuba-sort]").forEach((btn) => {
+      btn.addEventListener("click", () => setShutubaSort(btn.getAttribute("data-shutuba-sort")));
+    });
+    syncShutubaSortControls();
   }
 
   function escapeHtml(s) {
@@ -360,14 +423,34 @@
     return s;
   }
 
+  function isDayClosedSnapshot(data) {
+    if (!data || typeof data !== "object") return false;
+    if (data.cleared === true) return true;
+    const venues = Array.isArray(data.venues) ? data.venues : [];
+    const n = Number(data.race_count || 0);
+    return n === 0 && venues.length === 0;
+  }
+
+  function setDayClosedOverlay(on) {
+    const overlay = $("dayClosedOverlay");
+    document.body.classList.toggle("is-day-closed", !!on);
+    if (!overlay) return;
+    overlay.hidden = !on;
+    overlay.setAttribute("aria-hidden", on ? "false" : "true");
+  }
+
   function applyData(data, { flash = false } = {}) {
     const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
     const el = $("updatedAt");
+    const closed = isDayClosedSnapshot(data);
+    setDayClosedOverlay(closed);
     const stamped = formatUpdatedAtLabel(data.updated_at);
-    const text = stamped
-      ? `最終更新: ${stamped}（開催日 ${data.schedule_date || "-"}）`
-      : "更新時刻不明";
+    const text = closed
+      ? `本日の予想公開は終了しました（開催日 ${data.schedule_date || "-"}）`
+      : stamped
+        ? `最終更新: ${stamped}（開催日 ${data.schedule_date || "-"}）`
+        : "更新時刻不明";
     el.textContent = text;
     if (flash && prevUpdated && data.updated_at && prevUpdated !== data.updated_at) {
       el.classList.add("just-updated");
@@ -513,6 +596,7 @@
 
   setCtas();
   initAccordion();
+  initShutubaSortControls();
   loadSnapshot();
   const poll = Number(cfg.POLL_INTERVAL_MS) || 30000;
   if (poll > 0) {
