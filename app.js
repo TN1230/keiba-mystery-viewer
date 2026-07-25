@@ -32,7 +32,7 @@
     const hint = $("shutubaSortHint");
     if (hint) {
       hint.textContent = sortDefault
-        ? "推定3着内率の高い順（本体UIと同じ）"
+        ? "推定3着内率の高い順"
         : "馬番の小さい順";
     }
   }
