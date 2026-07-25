@@ -924,7 +924,7 @@ table.shutuba .mark-m { color: #7b1fa2; }
 }
 .help-list li { margin: 0.4rem 0; }
 
-/* ヘルプページ: PCでも中央寄せ */
+/* ヘルプページ: PCでも中央寄せ／本体レイアウトの overflow:hidden を解除して縦スクロール可能に */
 .help-page {
   max-width: 1100px;
   margin-left: auto;
@@ -943,6 +943,15 @@ table.shutuba .mark-m { color: #7b1fa2; }
   max-width: 1100px;
   margin-left: auto;
   margin-right: auto;
+}
+@media (min-width: 721px) {
+  html:has(body.help-page),
+  body.help-page {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 }
 
 .error {
