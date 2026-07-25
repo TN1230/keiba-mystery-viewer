@@ -207,6 +207,63 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   text-align: left;
   white-space: pre-line;
 }
+.sidebar-dev-notes {
+  margin: 0.65rem 0 0;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: left;
+}
+.sidebar-dev-notes > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  user-select: none;
+}
+.sidebar-dev-notes > summary::-webkit-details-marker {
+  display: none;
+}
+.sidebar-dev-notes > summary::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+  margin-top: -0.15rem;
+  transition: transform 0.15s ease;
+  flex: 0 0 auto;
+}
+.sidebar-dev-notes[open] > summary::after {
+  transform: rotate(-135deg);
+  margin-top: 0.15rem;
+}
+.sidebar-dev-notes-body {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(11, 61, 46, 0.08);
+}
+.sidebar-dev-notes-lead,
+.sidebar-dev-notes-def {
+  margin: 0;
+}
+.sidebar-dev-notes-list {
+  margin: 0.35rem 0;
+  padding: 0 0 0 1.1rem;
+}
+.sidebar-dev-notes-list li + li {
+  margin-top: 0.35rem;
+}
+.sidebar-dev-notes-def {
+  margin-top: 0.4rem;
+}
 .nav-links {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
@@ -322,6 +379,10 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   }
   .site-sidebar .update-timing {
     margin-top: 0.55rem;
+    font-size: 0.74rem;
+  }
+  .site-sidebar .sidebar-dev-notes {
+    margin-top: 0.5rem;
     font-size: 0.74rem;
   }
   .site-sidebar .nav-links {
