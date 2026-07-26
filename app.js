@@ -90,11 +90,13 @@
     }
     const latest = r.holmes_index == null || r.holmes_index === "" ? "-" : String(r.holmes_index);
     const morning = r.morning_holmes_index;
-    if (morning == null || morning === "" || String(morning) === latest) return latest;
+    if (morning == null || morning === "") return latest;
     const d = r.holmes_index_delta;
-    let dtxt = "";
+    let dtxt = "　Δ±0";
     if (typeof d === "number" && Number.isFinite(d)) {
       dtxt = d > 0 ? `　Δ+${d}` : d < 0 ? `　Δ${d}` : "　Δ±0";
+    } else if (String(morning) !== latest) {
+      dtxt = "";
     }
     return `${latest}（朝一 ${morning}${dtxt}）`;
   }
