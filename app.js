@@ -439,6 +439,29 @@
     overlay.setAttribute("aria-hidden", on ? "false" : "true");
   }
 
+  function renderUpdateTiming(data) {
+    const el = $("updateTiming") || document.querySelector(".update-timing");
+    if (!el) return;
+    const full = data && data.update_timing_text;
+    if (typeof full === "string" && full.trim()) {
+      el.textContent = full.trim();
+      return;
+    }
+    const line = data && data.update_timing_pre_race_line;
+    const mode = data && data.pre_race_trigger_mode;
+    const preLine =
+      (typeof line === "string" && line.trim()) ||
+      (mode === "15" || mode === "early" || mode === "15m"
+        ? "・発走15分前前後（全レース）"
+        : "・発走6〜8分前（全レース）");
+    el.textContent =
+      "【主な更新タイミング】\n" +
+      "・開催日早朝6時頃（全レース一斉）\n" +
+      "・発走1時間前頃（重賞のみ）\n" +
+      preLine +
+      "\n※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください";
+  }
+
   function applyData(data, { flash = false } = {}) {
     const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
@@ -456,6 +479,7 @@
       el.classList.add("just-updated");
       window.setTimeout(() => el.classList.remove("just-updated"), 2500);
     }
+    renderUpdateTiming(data);
     renderTop5();
     renderTabs();
     renderMatrix();
