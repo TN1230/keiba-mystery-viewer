@@ -83,6 +83,22 @@
     return null;
   }
 
+  function formatHolmesIndexDisplay(r) {
+    if (!r) return "-";
+    if (typeof r.holmes_index_display === "string" && r.holmes_index_display.trim()) {
+      return r.holmes_index_display.trim();
+    }
+    const latest = r.holmes_index == null || r.holmes_index === "" ? "-" : String(r.holmes_index);
+    const morning = r.morning_holmes_index;
+    if (morning == null || morning === "" || String(morning) === latest) return latest;
+    const d = r.holmes_index_delta;
+    let dtxt = "";
+    if (typeof d === "number" && Number.isFinite(d)) {
+      dtxt = d > 0 ? `　Δ+${d}` : d < 0 ? `　Δ${d}` : "　Δ±0";
+    }
+    return `${latest}（朝一 ${morning}${dtxt}）`;
+  }
+
   function renderTop5() {
     const ol = $("top5List");
     ol.innerHTML = "";
@@ -96,6 +112,8 @@
       const a = document.createElement("a");
       a.href = "#raceDetailCard";
       a.textContent = it.line || `${it.place} ${it.R}R`;
+      const idxDisp = formatHolmesIndexDisplay(it);
+      if (idxDisp && idxDisp !== "-") a.title = `ホームズ指数 ${idxDisp}`;
       a.addEventListener("click", (e) => {
         e.preventDefault();
         selectRace(it.race_id, it.place);
@@ -224,6 +242,7 @@
         else if (c === "ワトソン") val = watson;
         else if (c === "アイリーン") val = irene;
         else if (c === "sui") val = sui;
+        else if (c === "holmes_index") val = formatHolmesIndexDisplay(row);
         else val = row[c] ?? "-";
         table += `<td>${escapeHtml(val)}</td>`;
       }
@@ -234,7 +253,7 @@
           <div class="matrix-card-grid">
             <div><span>偏差</span><strong>${escapeHtml(row.dev ?? "-")}</strong></div>
             <div><span>ホームズ推</span><strong>${escapeHtml(sui)}</strong></div>
-            <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(row.holmes_index ?? "-")}</strong></div>
+            <div class="matrix-card-full"><span>ホームズ指数</span><strong>${escapeHtml(formatHolmesIndexDisplay(row))}</strong></div>
             <div><span>ワトソン</span><strong>${escapeHtml(watson)}</strong></div>
             <div><span>アイリーン</span><strong>${escapeHtml(irene)}</strong></div>
             <div class="matrix-card-full"><span>第3探偵</span><strong>${escapeHtml(third)}</strong></div>
@@ -308,7 +327,7 @@
       <h3>${escapeHtml(r.place)} ${escapeHtml(r.R)}R ${escapeHtml(r.name || "")}</h3>
       <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
-      <p class="meta">ホームズ指数: <strong>${escapeHtml(r.holmes_index)}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
+      <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
       <p class="meta">ホームズ推奨: ${escapeHtml(r.best_logic_label || "-")}</p>
       <div class="marks">
     `;
