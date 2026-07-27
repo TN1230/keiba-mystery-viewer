@@ -5,6 +5,10 @@
  * SHOW_CAST_ICONS:
  *   true  … 「登場人物の役割説明」にピクトグラムを表示（現行）
  *   false … 旧テキストのみ表示に戻す（いつでも切替可）
+ *
+ * PRE_RACE_TRIGGER_MODE:
+ *   "15" … サイドバー「主な更新タイミング」の直前行を15分前帯に
+ *   "6_8" … 6〜8分前帯に
  */
 window.PUBLIC_VIEWER_CONFIG = {
   SNAPSHOT_URL: "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json",
@@ -13,4 +17,5 @@ window.PUBLIC_VIEWER_CONFIG = {
   BRAND_NAME: "\u7AF6\u99ACAI \u30DF\u30B9\u30C6\u30EA\u30FC\u4E88\u60F3",
   POLL_INTERVAL_MS: 30000,
   SHOW_CAST_ICONS: true,
+  PRE_RACE_TRIGGER_MODE: "15",
 };
