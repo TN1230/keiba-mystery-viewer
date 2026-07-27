@@ -876,6 +876,20 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
+.holmes-recommend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  vertical-align: middle;
+}
+.holmes-recommend-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0;
+}
+html.hide-cast-icons .holmes-recommend-icon {
+  display: none;
+}
 .race-detail .marks {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

@@ -321,6 +321,30 @@
     }
   }
 
+  function castIconSrcForLogic(bestLogic, bestLogicLabel) {
+    const label = String(bestLogicLabel || "");
+    const bl = String(bestLogic || "").trim().toLowerCase();
+    if (bl === "watson" || /ワトソン/.test(label)) return "assets/cast/watson.png";
+    if (bl === "irene" || /アイリーン/.test(label)) return "assets/cast/irene.png";
+    if (bl === "moriarty" || /モーリアティ/.test(label)) return "assets/cast/moriarty.png";
+    if (/ホプキンス/.test(label)) return "assets/cast/hopkins.png";
+    if (bl === "hunter" || /ハンター/.test(label)) return "assets/cast/hunter.png";
+    return "";
+  }
+
+  function formatHolmesRecommendHtml(r) {
+    const label = String((r && r.best_logic_label) || "-").trim() || "-";
+    const icon = castIconSrcForLogic(r && r.best_logic, label);
+    if (!icon || label === "-") {
+      return `ホームズ推奨: ${escapeHtml(label)}`;
+    }
+    return (
+      `ホームズ推奨: <span class="holmes-recommend">` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<strong>${escapeHtml(label)}</strong></span>`
+    );
+  }
+
   function renderDetail() {
     const box = $("raceDetail");
     const found = findRace(state.raceId);
@@ -336,7 +360,7 @@
       <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
-      <p class="meta">ホームズ推奨: ${escapeHtml(r.best_logic_label || "-")}</p>
+      <p class="meta">${formatHolmesRecommendHtml(r)}</p>
       <div class="marks">
     `;
     for (const [k, label] of [["ワ", "ワトソン"], ["アイ", "アイリーン"], ["モ", "モーリアティ"], ["ハ/ホプ", "ハンター/ホプキンス"]]) {
