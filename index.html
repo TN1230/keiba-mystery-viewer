@@ -27,8 +27,12 @@
       </p>
       <section class="sidebar-jumps" id="sidebarJumps" aria-labelledby="sidebarJumpsTitle">
         <h2 class="sidebar-jumps-title" id="sidebarJumpsTitle">レースジャンプ</h2>
+        <div class="jump-layout-toggle" role="group" aria-label="ジャンプ配列">
+          <button type="button" class="jump-layout-btn active" data-jump-layout="venue" aria-pressed="true">場内</button>
+          <button type="button" class="jump-layout-btn" data-jump-layout="timeline" aria-pressed="false">発走表</button>
+        </div>
         <div id="venueTabsSidebar" class="tabs sidebar-venue-tabs" role="tablist" aria-label="会場"></div>
-        <p class="hint jump-legend sidebar-jump-legend">青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+        <p class="hint jump-legend sidebar-jump-legend">青=ホームズ指数1〜5位 / 緑=6〜10位 / 赤枠=最終更新に最も近い発走前</p>
         <div id="jumpButtonsSidebar" class="jump-row sidebar-jump-row"></div>
       </section>
       <section class="sidebar-subscribe" aria-labelledby="subscribeTitle">
@@ -45,18 +49,6 @@
 ・発走1時間前頃（重賞のみ）
 ・発走6〜8分前（全レース）
 ※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください</p>
-        <details class="sidebar-dev-notes">
-          <summary>【開発ノート】</summary>
-          <div class="sidebar-dev-notes-body">
-            <p class="sidebar-dev-notes-lead">※制作運用上で感じた個人的感想。参考までに</p>
-            <ul class="sidebar-dev-notes-list">
-              <li>ワトソンが不人気の馬を本命にしたときは良く感じる</li>
-              <li>3ロジックの時の、ほか二つの本命が同じでアイリーンだけが違う馬を本命にしていてかつそれが不人気の場合のアイリーン馬連が強い。夏競馬になって◎ー〇で50倍以上を週に1回以上当ててるイメージ</li>
-              <li>3着以内率最下位の馬が思ったより来る</li>
-            </ul>
-            <p class="sidebar-dev-notes-def">不人気→2桁人気もしくはそれに近い馬</p>
-          </div>
-        </details>
       </section>
     </aside>
 
@@ -113,12 +105,30 @@
         </button>
         <div class="acc-body">
           <div class="logic-blurbs">
-            <p class="logic-blurb is-meta"><strong>ホームズ</strong> … 全体メタ。各探偵の印を横断して「このレースは誰の思考を本線にするか」を決め、ホームズ指数で当日の優先度も付ける。</p>
-            <p class="logic-blurb"><strong>ワトソン</strong> … 手堅さ・安定志向。勝ちやすさや再現性を重視し、崩れにくい本線を組み立てる。派手な穴狙いより、堅実に残せる印付けが役割。</p>
-            <p class="logic-blurb"><strong>アイリーン</strong> … 妙味・回収志向。オッズ妙味を軸に勝負強さを見極め、本勝負／絞り推し／様子見／勝負見送りで買う強さを切り替える。</p>
-            <p class="logic-blurb"><strong>モーリアティ</strong> … 重賞特化。重賞だけで本命線／均衡線／波乱線のシナリオを立て、どの展開想定を本線にするかを決めて推奨買い目へ落とす。</p>
-            <p class="logic-blurb"><strong>ハンター</strong> … 夏競馬特化。6〜9月の札幌・函館・福島・新潟・小倉（非重賞・新馬以外）向けに、夏のローカル条件へ寄せたモデルで印を付ける。</p>
-            <p class="logic-blurb"><strong>ホプキンス</strong> … 新馬戦特化。実績の薄い新馬戦だけを対象に、新馬向けモデルで評価して印を付ける（未勝利戦は対象外）。</p>
+            <p class="logic-blurb is-meta" data-cast="holmes">
+              <img class="logic-cast-icon" src="assets/cast/holmes.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>ホームズ</strong> … 全体メタ。各探偵の印を横断して「このレースは誰の思考を本線にするか」を決め、ホームズ指数で当日の優先度も付ける。</span>
+            </p>
+            <p class="logic-blurb" data-cast="watson">
+              <img class="logic-cast-icon" src="assets/cast/watson.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>ワトソン</strong> … 手堅さ・安定志向。勝ちやすさや再現性を重視し、崩れにくい本線を組み立てる。派手な穴狙いより、堅実に残せる印付けが役割。</span>
+            </p>
+            <p class="logic-blurb" data-cast="irene">
+              <img class="logic-cast-icon" src="assets/cast/irene.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>アイリーン</strong> … 妙味・回収志向。オッズ妙味を軸に勝負強さを見極め、本勝負／絞り推し／様子見／勝負見送りで買う強さを切り替える。</span>
+            </p>
+            <p class="logic-blurb" data-cast="moriarty">
+              <img class="logic-cast-icon" src="assets/cast/moriarty.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>モーリアティ</strong> … 重賞特化。重賞だけで本命線／均衡線／波乱線のシナリオを立て、どの展開想定を本線にするかを決めて推奨買い目へ落とす。</span>
+            </p>
+            <p class="logic-blurb" data-cast="hunter">
+              <img class="logic-cast-icon" src="assets/cast/hunter.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>ハンター</strong> … 夏競馬特化。6〜9月の札幌・函館・福島・新潟・小倉（非重賞・新馬以外）向けに、夏のローカル条件へ寄せたモデルで印を付ける。</span>
+            </p>
+            <p class="logic-blurb" data-cast="hopkins">
+              <img class="logic-cast-icon" src="assets/cast/hopkins.png" alt="" width="40" height="40" decoding="async" />
+              <span class="logic-blurb-body"><strong>ホプキンス</strong> … 新馬戦特化。実績の薄い新馬戦だけを対象に、新馬向けモデルで評価して印を付ける（未勝利戦は対象外）。</span>
+            </p>
           </div>
           <p class="hint">マトリクスの「ホームズ推」＝ホームズによる推奨ロジック。詳細は <a href="help.html" target="_blank" rel="noopener noreferrer">ヘルプ</a>。</p>
         </div>
@@ -145,7 +155,11 @@
           <div class="matrix-nav mobile-only" id="matrixNavMobile">
             <div id="venueTabs" class="tabs" role="tablist" aria-label="会場"></div>
             <div class="jump-block" id="jumpBlockMain">
-              <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位</p>
+              <div class="jump-layout-toggle" role="group" aria-label="ジャンプ配列">
+                <button type="button" class="jump-layout-btn active" data-jump-layout="venue" aria-pressed="true">場内</button>
+                <button type="button" class="jump-layout-btn" data-jump-layout="timeline" aria-pressed="false">発走表</button>
+              </div>
+              <p class="hint jump-legend">ジャンプ色: 青=ホームズ指数1〜5位 / 緑=6〜10位 / 赤枠=最終更新に最も近い発走前</p>
               <div id="jumpButtons" class="jump-row"></div>
             </div>
           </div>
@@ -187,7 +201,7 @@
             <button type="button" class="shutuba-sort-btn active" data-shutuba-sort="default" aria-pressed="true">デフォルト</button>
             <button type="button" class="shutuba-sort-btn" data-shutuba-sort="umaban" aria-pressed="false">馬番順</button>
           </div>
-          <p class="hint shutuba-sort-hint" id="shutubaSortHint">推定3着内率の高い順</p>
+          <p class="hint shutuba-sort-hint" id="shutubaSortHint">推定3着内率の高い順（本体UIと同じ）</p>
           <div id="shutubaDetail" class="shutuba-detail">
             <p class="hint">レースを選ぶと出馬表が表示されます。</p>
           </div>
@@ -202,6 +216,12 @@
   </div>
 
   <script src="config.js"></script>
+  <script>
+    (function () {
+      var hide = (window.PUBLIC_VIEWER_CONFIG || {}).SHOW_CAST_ICONS === false;
+      document.documentElement.classList.toggle("hide-cast-icons", hide);
+    })();
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

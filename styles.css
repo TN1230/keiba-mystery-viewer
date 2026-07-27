@@ -35,9 +35,8 @@ body {
 }
 
 @media (min-width: 721px) {
-  /* 本体（.layout）だけ固定。ヘルプページは文書スクロールを維持 */
-  html:has(body:not(.help-page)),
-  body:not(.help-page) {
+  html,
+  body {
     height: 100%;
     overflow: hidden;
   }
@@ -208,63 +207,6 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   text-align: left;
   white-space: pre-line;
 }
-.sidebar-dev-notes {
-  margin: 0.65rem 0 0;
-  padding: 0;
-  border: 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.5;
-  text-align: left;
-}
-.sidebar-dev-notes > summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 2rem;
-  font-weight: 700;
-  color: var(--accent);
-  user-select: none;
-}
-.sidebar-dev-notes > summary::-webkit-details-marker {
-  display: none;
-}
-.sidebar-dev-notes > summary::after {
-  content: "";
-  width: 0.45rem;
-  height: 0.45rem;
-  border-right: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
-  transform: rotate(45deg);
-  margin-top: -0.15rem;
-  transition: transform 0.15s ease;
-  flex: 0 0 auto;
-}
-.sidebar-dev-notes[open] > summary::after {
-  transform: rotate(-135deg);
-  margin-top: 0.15rem;
-}
-.sidebar-dev-notes-body {
-  margin-top: 0.4rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid rgba(11, 61, 46, 0.08);
-}
-.sidebar-dev-notes-lead,
-.sidebar-dev-notes-def {
-  margin: 0;
-}
-.sidebar-dev-notes-list {
-  margin: 0.35rem 0;
-  padding: 0 0 0 1.1rem;
-}
-.sidebar-dev-notes-list li + li {
-  margin-top: 0.35rem;
-}
-.sidebar-dev-notes-def {
-  margin-top: 0.4rem;
-}
 .nav-links {
   margin: 0.75rem 0 0;
   font-size: 0.95rem;
@@ -380,10 +322,6 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   }
   .site-sidebar .update-timing {
     margin-top: 0.55rem;
-    font-size: 0.74rem;
-  }
-  .site-sidebar .sidebar-dev-notes {
-    margin-top: 0.5rem;
     font-size: 0.74rem;
   }
   .site-sidebar .nav-links {
@@ -535,10 +473,41 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   font-size: clamp(0.88rem, 3.4vw, 0.95rem);
   line-height: 1.55;
   overflow-wrap: anywhere;
+  /* 既定: ピクトグラム付き（見本どおり） */
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
 }
 .logic-blurb.is-meta {
   border-left-color: var(--accent);
   background: rgba(11, 61, 46, 0.12);
+}
+.logic-cast-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-top: 0.1rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fffef8;
+  box-shadow: 0 0 0 1px rgba(11, 61, 46, 0.18);
+}
+.logic-blurb-body {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 旧表示へ戻す: config SHOW_CAST_ICONS=false → html.hide-cast-icons */
+html.hide-cast-icons .logic-blurb {
+  display: block;
+  gap: 0;
+}
+html.hide-cast-icons .logic-cast-icon {
+  display: none;
+}
+html.hide-cast-icons .logic-blurb-body {
+  display: contents;
 }
 .logic-cast .hint a {
   color: var(--accent);
@@ -656,6 +625,26 @@ body.is-day-closed .btn-discord:not([aria-disabled="true"]):active {
   border-color: var(--accent);
 }
 
+/* 未発走のうち発走が最も近いレース（開催場タブ＋Rジャンプ） */
+.tab.is-nearest-prepost,
+.jump.is-nearest-prepost {
+  border: 4px solid #d32f2f !important;
+  box-shadow:
+    0 0 0 2px rgba(211, 47, 47, 0.35),
+    0 0 0 1px rgba(211, 47, 47, 0.85);
+  font-weight: 800;
+}
+.tab.is-nearest-prepost.active {
+  box-shadow:
+    0 0 0 2px rgba(211, 47, 47, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.jump.is-nearest-prepost.is-selected {
+  outline: 2px solid #d32f2f;
+  outline-offset: 2px;
+  border-color: #d32f2f !important;
+}
+
 .table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -731,6 +720,30 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 .jump-legend {
   margin: 0 0 0.45rem;
 }
+.jump-layout-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.55rem;
+}
+.jump-layout-btn {
+  min-height: 2.1rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid rgba(11, 61, 46, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.95);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.jump-layout-btn.active,
+.jump-layout-btn[aria-pressed="true"] {
+  background: rgba(11, 61, 46, 0.12);
+  border-color: var(--accent);
+  font-weight: 800;
+}
 .jump-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
@@ -755,6 +768,101 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 .jump.rank-mid {
   background: var(--green);
   border-color: var(--green-b);
+}
+
+/* 発走表モード: 会場列 × 発走時刻行（バレー得点推移表イメージ） */
+.jump-timeline {
+  margin: 0 0 0.85rem;
+}
+.jump-timeline-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.jump-scoreboard {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  background: rgba(255, 252, 245, 0.9);
+}
+.jump-scoreboard th,
+.jump-scoreboard td {
+  border: 1px solid rgba(11, 61, 46, 0.16);
+  padding: 0.28rem 0.3rem;
+  vertical-align: middle;
+  text-align: center;
+}
+.jump-scoreboard thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f3efe4;
+  color: var(--accent);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.jump-scoreboard-corner {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ebe6d8;
+  min-width: 3.2rem;
+}
+.jump-scoreboard-time {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #f7f3e9;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+  min-width: 3.2rem;
+}
+.jump-scoreboard-place.is-active-place {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.jump-scoreboard-cell {
+  min-width: 3.6rem;
+  background: #fffcf5;
+}
+.jump-scoreboard-cell.is-empty {
+  background: rgba(243, 240, 232, 0.55);
+}
+.jump-scoreboard-cell-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25rem;
+}
+.jump-scoreboard-cell .jump {
+  min-width: 2.6rem;
+  min-height: 2.2rem;
+  padding: 0.25rem 0.3rem;
+  font-size: 0.82rem;
+}
+.jump-scoreboard-dot {
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: rgba(11, 61, 46, 0.18);
+}
+.jump-scoreboard tr.is-nearest-row .jump-scoreboard-time {
+  color: #c62828;
+  font-weight: 800;
+}
+.sidebar-jump-timeline {
+  margin: 0;
+}
+.sidebar-jump-timeline .jump-scoreboard {
+  font-size: 0.78rem;
+}
+.sidebar-jump-timeline .jump-scoreboard-cell .jump {
+  min-height: 2.1rem;
+  font-size: 0.78rem;
 }
 
 .race-detail h3 {
@@ -925,7 +1033,7 @@ table.shutuba .mark-m { color: #7b1fa2; }
 }
 .help-list li { margin: 0.4rem 0; }
 
-/* ヘルプページ: PCでも中央寄せ／本体レイアウトの overflow:hidden を解除して縦スクロール可能に */
+/* ヘルプページ: PCでも中央寄せ */
 .help-page {
   max-width: 1100px;
   margin-left: auto;
@@ -944,15 +1052,6 @@ table.shutuba .mark-m { color: #7b1fa2; }
   max-width: 1100px;
   margin-left: auto;
   margin-right: auto;
-}
-@media (min-width: 721px) {
-  html:has(body.help-page),
-  body.help-page {
-    height: auto !important;
-    min-height: 100%;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
-  }
 }
 
 .error {

@@ -70,6 +70,12 @@
     }
   }
 
+  /** config.SHOW_CAST_ICONS=false で旧テキストのみ表示に戻せる */
+  function applyCastIconMode() {
+    const hide = cfg.SHOW_CAST_ICONS === false;
+    document.documentElement.classList.toggle("hide-cast-icons", hide);
+  }
+
   function venues() {
     return (state.data && state.data.venues) || [];
   }
@@ -640,6 +646,7 @@
   }
 
   setCtas();
+  applyCastIconMode();
   initAccordion();
   initShutubaSortControls();
   loadSnapshot();
