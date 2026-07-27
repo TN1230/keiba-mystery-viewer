@@ -434,20 +434,22 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
-  function formatUpdatedAtLabel(raw) {
+  function formatUpdatedAtLabel(raw, scheduleDate) {
     const s = String(raw || "").trim();
     if (!s) return "";
     // ISO / "YYYY-MM-DD HH:MM:SS" / "YYYY-MM-DDTHH:MM:SS(+TZ)"
     const m = s.match(
       /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
     );
+    const lines = [];
     if (m) {
-      const datePart = m[1];
-      const timePart = m[2] || "";
-      if (timePart) return `📅${datePart}　⏰${timePart}`;
-      return `📅${datePart}`;
+      lines.push(`📅${m[1]}`);
+      if (m[2]) lines.push(`⏰${m[2]}`);
+    } else {
+      lines.push(s);
     }
-    return s;
+    lines.push(`開催日 ${scheduleDate || "-"}`);
+    return lines.join("\n");
   }
 
   function isDayClosedSnapshot(data) {
@@ -505,12 +507,10 @@
     const el = $("updatedAt");
     const closed = isDayClosedSnapshot(data);
     setDayClosedOverlay(closed);
-    const stamped = formatUpdatedAtLabel(data.updated_at);
+    const stamped = formatUpdatedAtLabel(data.updated_at, data.schedule_date);
     const text = closed
-      ? `本日の予想公開は終了しました（開催日 ${data.schedule_date || "-"}）`
-      : stamped
-        ? `最終更新: ${stamped}（開催日 ${data.schedule_date || "-"}）`
-        : "更新時刻不明";
+      ? `本日の予想公開は終了しました\n開催日 ${data.schedule_date || "-"}`
+      : stamped || "更新時刻不明";
     el.textContent = text;
     if (flash && prevUpdated && data.updated_at && prevUpdated !== data.updated_at) {
       el.classList.add("just-updated");

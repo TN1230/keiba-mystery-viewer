@@ -183,6 +183,7 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   font-weight: 700;
   color: var(--accent);
   line-height: 1.4;
+  white-space: pre-line;
   transition: color 0.3s ease, background-color 0.3s ease;
 }
 .updated.just-updated {
