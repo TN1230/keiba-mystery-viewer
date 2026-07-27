@@ -469,18 +469,28 @@
   function renderUpdateTiming(data) {
     const el = $("updateTiming") || document.querySelector(".update-timing");
     if (!el) return;
+    // 優先: config.js の PRE_RACE_TRIGGER_MODE（現行運用帯）→ スナップショット → 既定15
+    const cfgMode = String(cfg.PRE_RACE_TRIGGER_MODE || "").trim().toLowerCase();
+    const snapMode = data && data.pre_race_trigger_mode != null
+      ? String(data.pre_race_trigger_mode).trim().toLowerCase()
+      : "";
+    const mode = cfgMode || snapMode || "15";
+    const is15 = mode === "15" || mode === "early" || mode === "15m" || mode === "15min";
+    const preLine = is15
+      ? "・発走15分前前後（全レース）"
+      : "・発走6〜8分前（全レース）";
+    // スナップショット全文は、config 未指定かつ mode 一致時のみ採用（古い6_8文面の上書きを防ぐ）
     const full = data && data.update_timing_text;
-    if (typeof full === "string" && full.trim()) {
+    if (
+      !cfgMode &&
+      typeof full === "string" &&
+      full.trim() &&
+      snapMode &&
+      ((is15 && /15/.test(full)) || (!is15 && /6/.test(full)))
+    ) {
       el.textContent = full.trim();
       return;
     }
-    const line = data && data.update_timing_pre_race_line;
-    const mode = data && data.pre_race_trigger_mode;
-    const preLine =
-      (typeof line === "string" && line.trim()) ||
-      (mode === "15" || mode === "early" || mode === "15m"
-        ? "・発走15分前前後（全レース）"
-        : "・発走6〜8分前（全レース）");
     el.textContent =
       "【主な更新タイミング】\n" +
       "・開催日早朝6時頃（全レース一斉）\n" +
