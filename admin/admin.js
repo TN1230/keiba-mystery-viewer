@@ -365,11 +365,14 @@
         retryDiscover: true,
       });
       if (!res.ok || !data.ok) {
-        const detail =
-          data.message ||
-          (data.error === "ip_banned"
-            ? "連続失敗のためこのIPは一時的にアクセス禁止です"
-            : `ログインに失敗しました (HTTP ${res.status})`);
+        let detail = data.message || `ログインに失敗しました (HTTP ${res.status})`;
+        if (data.error === "ip_banned") {
+          detail = data.message || "連続失敗のためこのIPは一時的にアクセス禁止です";
+        } else if (data.error === "session_held_by_other_ip") {
+          detail =
+            data.message ||
+            "別のIPでログイン中のため、この端末ではログインできません。";
+        }
         setStatus(loginStatus, detail, "error");
         return;
       }
