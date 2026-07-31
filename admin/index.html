@@ -20,20 +20,31 @@
       <h1 class="admin-title">管理画面</h1>
     </header>
 
-    <section class="admin-card" id="loginPanel" hidden>
+    <section class="admin-card" id="loginPanel">
       <h2 class="admin-section-title">ログイン</h2>
       <p class="admin-hint">パスワードを入力してください（大文字・小文字を区別します）</p>
       <form id="loginForm" class="admin-form" autocomplete="current-password">
         <label class="admin-label" for="passwordInput">パスワード</label>
-        <input
-          id="passwordInput"
-          class="admin-input"
-          type="password"
-          name="password"
-          required
-          autocomplete="current-password"
-          inputmode="text"
-        />
+        <div class="admin-password-row">
+          <input
+            id="passwordInput"
+            class="admin-input"
+            type="password"
+            name="password"
+            required
+            autocomplete="current-password"
+            inputmode="text"
+            spellcheck="false"
+            autocapitalize="off"
+          />
+          <button
+            type="button"
+            class="admin-btn admin-btn-secondary admin-toggle-pw"
+            id="togglePasswordBtn"
+            aria-pressed="false"
+            aria-label="パスワードを表示"
+          >表示</button>
+        </div>
         <button type="submit" class="admin-btn admin-btn-primary" id="loginBtn">ログイン</button>
       </form>
       <p class="admin-status" id="loginStatus" role="status" aria-live="polite"></p>
@@ -41,6 +52,7 @@
 
     <section class="admin-card" id="menuPanel" hidden>
       <h2 class="admin-section-title">メニュー</h2>
+      <p class="admin-hint" id="sessionHint">セッションはログインから10分で自動ログアウトします。開始した処理はログアウト後もサーバー上で継続します。</p>
       <nav class="admin-menu" aria-label="管理メニュー">
         <button type="button" class="admin-btn admin-btn-action" id="btnMorningBulk">① 一斉予想再実行</button>
         <button type="button" class="admin-btn admin-btn-action" id="btnModemReboot">② モデム再起動</button>

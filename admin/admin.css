@@ -70,11 +70,26 @@
   font-family: inherit;
   background: #fff;
   color: var(--ink);
+  width: 100%;
 }
 
 .admin-input:focus {
   outline: 2px solid rgba(11, 61, 46, 0.35);
   outline-offset: 1px;
+}
+
+.admin-password-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.admin-toggle-pw {
+  min-width: 4.5rem;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  white-space: nowrap;
 }
 
 .admin-menu {
