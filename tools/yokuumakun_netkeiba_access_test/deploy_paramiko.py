@@ -76,31 +76,37 @@ def main() -> int:
         f"cp {remote_dir}/install_into_admin_panel.py {remote_dir}/install_into_admin_panel.py",
         f"cd {remote_dir} && python3 install_into_admin_panel.py {REMOTE_ROOT}",
         f"cd {REMOTE_ROOT} && .venv/bin/python -m py_compile netkeiba_access_test.py admin_panel_api.py && echo COMPILE_OK",
-        # Webhook: 環境変数 DISCORD_WEBHOOK_TEST があれば .env に反映
-        (
+    ]
+    webhook = (os.environ.get("DISCORD_WEBHOOK_TEST") or "").strip()
+    # Webhook をリモートへ渡す（ログには出さない）
+    if webhook:
+        import base64
+
+        b64 = base64.b64encode(webhook.encode("utf-8")).decode("ascii")
+        cmds.append(
             "python3 - <<'PY'\n"
-            "import os\n"
+            "import base64\n"
             "from pathlib import Path\n"
             f"p=Path('{REMOTE_ROOT}/.env')\n"
-            "wh=(os.environ.get('DISCORD_WEBHOOK_TEST') or '').strip()\n"
+            f"wh=base64.b64decode('{b64}').decode('utf-8').strip()\n"
             "text=p.read_text(encoding='utf-8', errors='replace') if p.is_file() else ''\n"
             "lines=text.splitlines()\n"
-            "if wh:\n"
-            "    out=[]; done=False\n"
-            "    for line in lines:\n"
-            "        if line.startswith('DISCORD_WEBHOOK_TEST='):\n"
-            "            out.append('DISCORD_WEBHOOK_TEST='+wh); done=True\n"
-            "        else: out.append(line)\n"
-            "    if not done: out.append('DISCORD_WEBHOOK_TEST='+wh)\n"
-            "    p.write_text('\\n'.join(out)+'\\n', encoding='utf-8')\n"
-            "    print('env_webhook=updated')\n"
-            "elif not any(l.startswith('DISCORD_WEBHOOK_TEST=') for l in lines):\n"
-            "    p.write_text(text.rstrip()+'\\n# DISCORD_WEBHOOK_TEST=https://discord.com/api/webhooks/...\\n', encoding='utf-8')\n"
-            "    print('env_webhook=placeholder')\n"
-            "else:\n"
-            "    print('env_webhook=kept')\n"
+            "out=[]; done=False\n"
+            "for line in lines:\n"
+            "    if line.startswith('DISCORD_WEBHOOK_TEST='):\n"
+            "        out.append('DISCORD_WEBHOOK_TEST='+wh); done=True\n"
+            "    else: out.append(line)\n"
+            "if not done: out.append('DISCORD_WEBHOOK_TEST='+wh)\n"
+            "p.write_text('\\n'.join(out)+'\\n', encoding='utf-8')\n"
+            "print('env_webhook=updated')\n"
             "PY"
-        ),
+        )
+    else:
+        cmds.append(
+            f"grep -q '^DISCORD_WEBHOOK_TEST=' {REMOTE_ROOT}/.env 2>/dev/null || "
+            f"echo '# DISCORD_WEBHOOK_TEST=https://discord.com/api/webhooks/...' >> {REMOTE_ROOT}/.env"
+        )
+    cmds.extend([
         f"echo '{pw}' | sudo -S systemctl restart yokuum-admin-panel.service",
         "sleep 1",
         "systemctl is-active yokuum-admin-panel.service",
@@ -111,7 +117,7 @@ def main() -> int:
             "import json; r=run_netkeiba_access_test(); print(json.dumps({k:r.get(k) for k in "
             "('ok','denied','race_id','webhook')}, ensure_ascii=False))\""
         ),
-    ]
+    ])
     rc = 0
     for cmd in cmds:
         code, out = _run(client, cmd)
