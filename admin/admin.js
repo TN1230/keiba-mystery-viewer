@@ -18,7 +18,14 @@
   const loginBtn = document.getElementById("loginBtn");
   const btnMorningBulk = document.getElementById("btnMorningBulk");
   const btnModemReboot = document.getElementById("btnModemReboot");
+  const btnOpsLogs = document.getElementById("btnOpsLogs");
   const btnLogout = document.getElementById("btnLogout");
+  const logsPanel = document.getElementById("logsPanel");
+  const logsList = document.getElementById("logsList");
+  const logsMeta = document.getElementById("logsMeta");
+  const logsStatus = document.getElementById("logsStatus");
+  const btnLogsRefresh = document.getElementById("btnLogsRefresh");
+  const btnLogsClose = document.getElementById("btnLogsClose");
 
   function setStatus(el, message, kind) {
     if (!el) return;
@@ -115,11 +122,109 @@
   function showLogin() {
     loginPanel.hidden = false;
     menuPanel.hidden = true;
+    if (logsPanel) logsPanel.hidden = true;
   }
 
   function showMenu() {
     loginPanel.hidden = true;
     menuPanel.hidden = false;
+    if (logsPanel) logsPanel.hidden = true;
+  }
+
+  function showLogsPanel() {
+    loginPanel.hidden = true;
+    menuPanel.hidden = false;
+    if (logsPanel) logsPanel.hidden = false;
+  }
+
+  function eventLabel(event) {
+    const map = {
+      admin_login: "ログイン",
+      admin_logout: "ログアウト",
+      admin_morning_bulk_rerun: "一斉予想再実行",
+      admin_modem_reboot: "モデム再起動",
+    };
+    return map[event] || event || "(不明)";
+  }
+
+  function statusClass(status) {
+    const s = String(status || "").toLowerCase();
+    if (s === "ok" || s === "info") return s === "ok" ? "is-ok" : "";
+    if (s === "error" || s === "fail" || s === "banned") return `is-${s === "banned" ? "banned" : s === "fail" ? "fail" : "error"}`;
+    if (s === "warn" || s === "warning") return "is-warn";
+    return "";
+  }
+
+  function renderOpsLogs(entries) {
+    if (!logsList) return;
+    logsList.innerHTML = "";
+    if (!entries.length) {
+      logsList.innerHTML = '<p class="admin-hint">該当するログはありません。</p>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const row of entries) {
+      const item = document.createElement("article");
+      item.className = "admin-log-item";
+      const meta = document.createElement("div");
+      meta.className = "admin-log-meta";
+      const ts = document.createElement("span");
+      ts.textContent = row.ts || "";
+      const ev = document.createElement("span");
+      ev.className = "admin-log-event";
+      ev.textContent = eventLabel(row.event);
+      const st = document.createElement("span");
+      st.className = `admin-log-status ${statusClass(row.status)}`.trim();
+      st.textContent = row.status || "";
+      const src = document.createElement("span");
+      src.textContent = row.source || "";
+      meta.append(ts, ev, st, src);
+      if (row.ip) {
+        const ip = document.createElement("span");
+        ip.textContent = row.ip;
+        meta.append(ip);
+      }
+      const detail = document.createElement("p");
+      detail.className = "admin-log-detail";
+      detail.textContent = row.detail || "";
+      item.append(meta, detail);
+      frag.append(item);
+    }
+    logsList.append(frag);
+  }
+
+  async function loadOpsLogs() {
+    setStatus(logsStatus, "読み込み中…");
+    if (logsMeta) logsMeta.textContent = "過去24時間の動作を取得しています…";
+    btnOpsLogs.disabled = true;
+    btnLogsRefresh.disabled = true;
+    try {
+      const token = getToken();
+      if (!token) {
+        await forceLogout("セッションがありません。再ログインしてください。");
+        return;
+      }
+      const { res, data } = await api("/admin/ops-logs", { token });
+      if (res.status === 401) {
+        await forceLogout("セッションが切れました。再ログインしてください。");
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setStatus(logsStatus, data.message || "ログ取得に失敗しました", "error");
+        return;
+      }
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      renderOpsLogs(entries);
+      if (logsMeta) {
+        logsMeta.textContent = `過去${data.hours || 24}時間 / ${data.count ?? entries.length}件（新しい順）`;
+      }
+      setStatus(logsStatus, "", "ok");
+    } catch (e) {
+      setStatus(logsStatus, e.message || String(e), "error");
+    } finally {
+      btnOpsLogs.disabled = false;
+      btnLogsRefresh.disabled = false;
+    }
   }
 
   async function forceLogout(message) {
@@ -328,6 +433,20 @@
       "/admin/modem-reboot",
       "モデムを再起動します。通信が一時的に切れます。ログアウト後も再起動処理は継続します。よろしいですか？"
     );
+  });
+
+  btnOpsLogs.addEventListener("click", async () => {
+    showLogsPanel();
+    await loadOpsLogs();
+  });
+
+  btnLogsRefresh.addEventListener("click", async () => {
+    await loadOpsLogs();
+  });
+
+  btnLogsClose.addEventListener("click", () => {
+    if (logsPanel) logsPanel.hidden = true;
+    setStatus(menuStatus, "");
   });
 
   btnLogout.addEventListener("click", async () => {

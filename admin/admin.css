@@ -155,3 +155,74 @@
 .admin-foot a {
   color: var(--accent);
 }
+
+.admin-logs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.admin-logs-head .admin-section-title {
+  margin: 0;
+}
+
+.admin-logs-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.admin-btn-small {
+  min-height: 2.4rem;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.admin-logs-list {
+  max-height: min(55vh, 28rem);
+  overflow: auto;
+  display: grid;
+  gap: 0.55rem;
+  padding-right: 0.15rem;
+}
+
+.admin-log-item {
+  border: 1px solid rgba(11, 61, 46, 0.12);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.admin-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.admin-log-event {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.admin-log-status {
+  font-weight: 700;
+}
+
+.admin-log-status.is-ok { color: #0b3d2e; }
+.admin-log-status.is-error,
+.admin-log-status.is-banned,
+.admin-log-status.is-fail { color: #8b1e1e; }
+.admin-log-status.is-warn { color: #8a5a00; }
+
+.admin-log-detail {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
