@@ -1,0 +1,142 @@
+.admin-body {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 2rem var(--pad) 3rem;
+}
+
+.admin-shell {
+  width: min(28rem, 100%);
+}
+
+.admin-header {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+
+.admin-brand {
+  margin: 0;
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.admin-title {
+  margin: 0.35rem 0 0;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-card {
+  background: rgba(255, 252, 245, 0.94);
+  border: 1px solid rgba(11, 61, 46, 0.12);
+  border-radius: 12px;
+  padding: 1.25rem 1.15rem 1.35rem;
+  box-shadow: 0 10px 28px rgba(40, 30, 10, 0.06);
+}
+
+.admin-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.admin-hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.admin-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-label {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.admin-input {
+  min-height: var(--touch);
+  padding: 0.55rem 0.75rem;
+  border: 1px solid rgba(11, 61, 46, 0.22);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--ink);
+}
+
+.admin-input:focus {
+  outline: 2px solid rgba(11, 61, 46, 0.35);
+  outline-offset: 1px;
+}
+
+.admin-menu {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-btn {
+  min-height: var(--touch);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.65rem 1rem;
+}
+
+.admin-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-btn-primary,
+.admin-btn-action {
+  background: var(--accent);
+  color: #f7f4ec;
+}
+
+.admin-btn-action:hover:not(:disabled),
+.admin-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.admin-btn-secondary {
+  background: transparent;
+  color: var(--accent);
+  border-color: rgba(11, 61, 46, 0.28);
+}
+
+.admin-status {
+  margin: 1rem 0 0;
+  min-height: 1.4em;
+  font-size: 0.92rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.admin-status.is-error {
+  color: #8b1e1e;
+}
+
+.admin-status.is-ok {
+  color: #0b3d2e;
+}
+
+.admin-foot {
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.admin-foot a {
+  color: var(--accent);
+}

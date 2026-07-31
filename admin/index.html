@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+  <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex" />
+  <title>管理画面 — 競馬AI ミステリー予想</title>
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body class="admin-body">
+  <main class="admin-shell" id="adminApp">
+    <header class="admin-header">
+      <p class="admin-brand">競馬AI ミステリー予想</p>
+      <h1 class="admin-title">管理画面</h1>
+    </header>
+
+    <section class="admin-card" id="loginPanel" hidden>
+      <h2 class="admin-section-title">ログイン</h2>
+      <p class="admin-hint">パスワードを入力してください（大文字・小文字を区別します）</p>
+      <form id="loginForm" class="admin-form" autocomplete="current-password">
+        <label class="admin-label" for="passwordInput">パスワード</label>
+        <input
+          id="passwordInput"
+          class="admin-input"
+          type="password"
+          name="password"
+          required
+          autocomplete="current-password"
+          inputmode="text"
+        />
+        <button type="submit" class="admin-btn admin-btn-primary" id="loginBtn">ログイン</button>
+      </form>
+      <p class="admin-status" id="loginStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="admin-card" id="menuPanel" hidden>
+      <h2 class="admin-section-title">メニュー</h2>
+      <nav class="admin-menu" aria-label="管理メニュー">
+        <button type="button" class="admin-btn admin-btn-action" id="btnMorningBulk">① 一斉予想再実行</button>
+        <button type="button" class="admin-btn admin-btn-action" id="btnModemReboot">② モデム再起動</button>
+        <button type="button" class="admin-btn admin-btn-secondary" id="btnLogout">③ ログアウト</button>
+      </nav>
+      <p class="admin-status" id="menuStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <p class="admin-foot">
+      <a href="../index.html">閲覧サイトへ戻る</a>
+    </p>
+  </main>
+
+  <script src="../config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
