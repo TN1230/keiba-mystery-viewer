@@ -17,6 +17,7 @@
   const sessionHint = document.getElementById("sessionHint");
   const loginBtn = document.getElementById("loginBtn");
   const btnMorningBulk = document.getElementById("btnMorningBulk");
+  const btnAccessTest = document.getElementById("btnAccessTest");
   const btnModemReboot = document.getElementById("btnModemReboot");
   const btnOpsLogs = document.getElementById("btnOpsLogs");
   const btnLogout = document.getElementById("btnLogout");
@@ -142,6 +143,8 @@
       admin_login: "ログイン",
       admin_logout: "ログアウト",
       admin_morning_bulk_rerun: "一斉予想再実行",
+      admin_netkeiba_access_test: "アクセス試験",
+      netkeiba_access_test: "アクセス試験",
       admin_modem_reboot: "モデム再起動",
     };
     return map[event] || event || "(不明)";
@@ -395,6 +398,30 @@
     }
   });
 
+  function formatAccessTestMessage(data) {
+    const base = data.message || (data.ok ? "アクセス試験完了" : "アクセス試験で異常を検出");
+    const parts = [base];
+    if (Array.isArray(data.checks) && data.checks.length) {
+      const brief = data.checks
+        .map((c) => {
+          const name = c.name || "check";
+          const st = c.status == null ? "?" : c.status;
+          return `${name}:${c.ok ? "OK" : "NG"}(${st})`;
+        })
+        .join(" / ");
+      parts.push(brief);
+    }
+    if (data.race_id) parts.push(`race_id=${data.race_id}`);
+    if (data.webhook_configured === false) {
+      parts.push("テスト用Webhook未設定");
+    } else if (data.webhook && data.webhook.ok === false) {
+      parts.push(`Webhook通知失敗`);
+    } else if (data.webhook && data.webhook.ok) {
+      parts.push("Webhook通知済み");
+    }
+    return parts.join(" — ");
+  }
+
   async function runAction(btn, path, confirmMsg) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     setStatus(menuStatus, "実行中…");
@@ -408,6 +435,31 @@
       const { res, data } = await api(path, { method: "POST", token });
       if (res.status === 401) {
         await forceLogout("セッションが切れました。開始済みの処理はサーバー上で継続している場合があります。再ログインしてください。");
+        return;
+      }
+      if (path === "/admin/netkeiba-access-test") {
+        // 試験自体は HTTP 200 で ok:false（拒否検出）もあり得る
+        if (res.status === 404) {
+          setStatus(
+            menuStatus,
+            "アクセス試験APIが未導入です。サーバーへ netkeiba_access_test をデプロイしてください。",
+            "error"
+          );
+          return;
+        }
+        if (!res.ok && data.error === "access_test_failed") {
+          setStatus(menuStatus, data.message || "アクセス試験に失敗しました", "error");
+          return;
+        }
+        if (!res.ok) {
+          setStatus(menuStatus, data.message || "実行に失敗しました", "error");
+          return;
+        }
+        setStatus(
+          menuStatus,
+          formatAccessTestMessage(data),
+          data.ok ? "ok" : "error"
+        );
         return;
       }
       if (!res.ok || !data.ok) {
@@ -427,6 +479,14 @@
       btnMorningBulk,
       "/admin/morning-bulk-rerun",
       "一斉予想を再実行します。ログアウト後もサーバー上で処理は継続します。よろしいですか？"
+    );
+  });
+
+  btnAccessTest.addEventListener("click", () => {
+    runAction(
+      btnAccessTest,
+      "/admin/netkeiba-access-test",
+      "サーバーから netkeiba へのアクセス試験を実行します。結果はテスト用Webhookへ通知されます。よろしいですか？"
     );
   });
 
