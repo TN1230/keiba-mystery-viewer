@@ -827,5 +827,70 @@ class H:
             self.assertEqual(text2.count("def _handle_remote_bootstrap"), 1)
 
 
+class ImmediateWakeTests(unittest.TestCase):
+    def test_pending_forces_publish_decision(self) -> None:
+        from morning_bulk_publish_watch import decide_publish
+        from viewer_publish_wake import write_pending
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "logs").mkdir()
+            write_pending(
+                reason="pre_race_publish_failed",
+                race_id="202608010301",
+                error="boom",
+                root=root,
+            )
+            out = decide_publish(root, "2026-08-01", None)
+            self.assertEqual(out["action"], "force_publish")
+            self.assertEqual(out["reason"], "pending_wake")
+
+    def test_urgent_purchase_title_near_post(self) -> None:
+        from morning_bulk_publish_watch import classify_anomaly
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        jst = ZoneInfo("Asia/Tokyo")
+        now = datetime.now(jst)
+        start = now + timedelta(minutes=15)
+        hhmm = start.strftime("%H:%M")
+        snap = {
+            "venues": [
+                {
+                    "races": [
+                        {
+                            "race_id": "202608010301",
+                            "place": "札幌",
+                            "R": "1",
+                            "start_time": hhmm,
+                            "predicted_at": "2026-08-01 10:00:00",
+                        }
+                    ]
+                }
+            ]
+        }
+        a = classify_anomaly(
+            {
+                "action": "force_publish",
+                "reason": "cache_newer_than_public",
+                "detail": "x",
+                "day": "2026-08-01",
+            },
+            snap,
+        )
+        self.assertIsNotNone(a)
+        assert a is not None
+        self.assertTrue(a.get("urgent_purchase_window"))
+        self.assertIn("発走間近", a["title"])
+
+    def test_inject_block_mentions_wake(self) -> None:
+        from patch_pre_race_publish_on_success import _inject_block
+
+        block = _inject_block("    ")
+        self.assertIn("mark_pending_and_wake", block)
+        self.assertIn("viewer_publish_wake", block)
+        self.assertIn("public_viewer_publish_returned_not_ok", block)
+
+
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

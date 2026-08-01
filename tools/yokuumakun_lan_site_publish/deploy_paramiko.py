@@ -98,6 +98,7 @@ def main() -> int:
             "official_republish_from_cache.py",
             "patch_worker_publish_on_success.py",
             "patch_pre_race_publish_on_success.py",
+            "viewer_publish_wake.py",
             "install_publish_endpoint.py",
             "install_remote_bootstrap_endpoint.py",
             "morning_bulk_publish_watch.py",
@@ -121,6 +122,7 @@ def main() -> int:
                 f"python3 {remote_tmp}/install_remote_bootstrap_endpoint.py {REMOTE_ROOT} || true",
                 f"cp {remote_tmp}/force_publish_public_snapshot.py "
                 f"{remote_tmp}/morning_bulk_publish_watch.py "
+                f"{remote_tmp}/viewer_publish_wake.py "
                 f"{remote_tmp}/standalone_publish_from_cache.py "
                 f"{remote_tmp}/official_republish_from_cache.py {REMOTE_ROOT}/",
                 f"mkdir -p {REMOTE_ROOT}/server_deployment && "
@@ -128,6 +130,7 @@ def main() -> int:
                 f"{REMOTE_ROOT}/server_deployment/",
                 f"cd {REMOTE_ROOT} && .venv/bin/python -m py_compile "
                 "force_publish_public_snapshot.py morning_bulk_publish_watch.py "
+                "viewer_publish_wake.py "
                 "morning_bulk_server_worker.py pre_race_auto_predict_worker.py "
                 "admin_panel_api.py",
                 f"cd {REMOTE_ROOT} && .venv/bin/python force_publish_public_snapshot.py",

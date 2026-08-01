@@ -6,8 +6,9 @@
 1. 朝一斉完了なのに latest が空/前日 → publish
 2. 直前予想成功でキャッシュの predicted_at が公開より新しい → publish
 3. 直前窓のレースが朝予想のまま（他レースの直近 publish に隠れない）→ publish
+4. publish 失敗で立った pending フラグ → 即 publish（購入時間確保）
 
-systemd timer または cron から数分おきに呼ぶ。
+systemd timer（開催帯 30 秒）または viewer_publish_wake の oneshot から呼ぶ。
 """
 
 from __future__ import annotations
@@ -297,9 +298,77 @@ def _public_stale_during_prerace_window(
     return False, "no_stale_prerace_window"
 
 
+def _load_pending(root: Path) -> dict[str, Any] | None:
+    try:
+        from viewer_publish_wake import load_pending
+
+        return load_pending(root)
+    except Exception:
+        fp = root / "logs" / "viewer_publish_pending.json"
+        if not fp.is_file():
+            return None
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else None
+        except Exception:
+            return None
+
+
+def _clear_pending(root: Path) -> None:
+    try:
+        from viewer_publish_wake import clear_pending
+
+        clear_pending(root)
+        return
+    except Exception:
+        pass
+    try:
+        fp = root / "logs" / "viewer_publish_pending.json"
+        if fp.is_file():
+            fp.unlink()
+    except Exception:
+        pass
+
+
+def _minutes_to_nearest_post(snap: dict[str, Any] | None) -> float | None:
+    """公開 snapshot 上、いまから最も近い発走までの分。"""
+    if not snap:
+        return None
+    now = datetime.now(_JST)
+    best: float | None = None
+    for r in _iter_public_races(snap):
+        start_s = str(r.get("start_time") or "").strip()
+        if not start_s or ":" not in start_s:
+            continue
+        try:
+            hh, mm = start_s.split(":")[:2]
+            start_dt = now.replace(
+                hour=int(hh), minute=int(mm), second=0, microsecond=0
+            )
+        except Exception:
+            continue
+        mins = (start_dt - now).total_seconds() / 60.0
+        # 発走直後〜これから 40 分以内を購入時間帯として見る
+        if -5 <= mins <= 40:
+            if best is None or abs(mins) < abs(best):
+                best = mins
+    return best
+
+
 def decide_publish(root: Path, day: str, snap: dict[str, Any] | None) -> dict[str, Any]:
     """テスト用: publish 要否を判定する。"""
     out: dict[str, Any] = {"day": day, "action": "noop"}
+    pending = _load_pending(root)
+    if pending:
+        out["action"] = "force_publish"
+        out["reason"] = "pending_wake"
+        out["detail"] = (
+            f"pending_reason={pending.get('reason')} "
+            f"race_id={pending.get('race_id')} at={pending.get('at')}"
+        )
+        out["pending"] = pending
+        return out
+
     if not _done_flag_exists(root, day) and not _cache_exists(root, day):
         out["reason"] = "no_morning_bulk_done_or_cache"
         return out
@@ -334,13 +403,16 @@ _ANOMALY_REASONS = {
     "cache_newer_than_public": "viewer_publish_lag_after_predict",
     "stale_during_prerace": "viewer_publish_lag_in_prerace_window",
     "empty_or_wrong_day": "viewer_snapshot_empty_or_wrong_day",
+    "pending_wake": "viewer_publish_pending_wake",
 }
 _ANOMALY_STATE_NAME = "viewer_publish_anomaly_state.json"
 _ANOMALY_LOG_NAME = "viewer_publish_anomaly.log"
 _ANOMALY_NOTIFY_COOLDOWN = timedelta(minutes=15)
 
 
-def classify_anomaly(decision: dict[str, Any]) -> dict[str, Any] | None:
+def classify_anomaly(
+    decision: dict[str, Any], snap: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """decide_publish 結果から「異常」を明示分類する。"""
     if decision.get("action") != "force_publish":
         return None
@@ -358,14 +430,28 @@ def classify_anomaly(decision: dict[str, Any]) -> dict[str, Any] | None:
         "viewer_snapshot_empty_or_wrong_day": (
             "【異常】閲覧サイト snapshot が空、または開催日不一致です"
         ),
+        "viewer_publish_pending_wake": (
+            "【異常】公開 publish が失敗したため pending 経由で直ちに再試行します"
+        ),
     }
+    title = titles.get(kind, "【異常】閲覧サイト公開の取りこぼし")
+    near = _minutes_to_nearest_post(snap)
+    urgent_purchase = near is not None and -5 <= near <= 25
+    if urgent_purchase:
+        title = (
+            f"【異常・発走間近】馬券購入時間確保のため直ちに公開修復します"
+            f"（最寄り発走まで約{near:.0f}分）\n"
+            + title
+        )
     return {
         "anomaly": True,
         "kind": kind,
         "reason": reason,
-        "title": titles.get(kind, "【異常】閲覧サイト公開の取りこぼし"),
+        "title": title,
         "detail": decision.get("detail") or reason,
         "day": decision.get("day"),
+        "minutes_to_nearest_post": near,
+        "urgent_purchase_window": urgent_purchase,
     }
 
 
@@ -487,19 +573,35 @@ def _upload_anomaly_status(root: Path, payload: dict[str, Any]) -> str | None:
         return f"upload_exc={type(e).__name__}:{e}"
 
 
-def _verify_resolved(root: Path, day: str) -> dict[str, Any]:
-    snap = _fetch_public()
-    decision = decide_publish(root, day, snap)
-    still = classify_anomaly(decision)
-    return {
-        "resolved": still is None,
-        "decision": {
-            "action": decision.get("action"),
-            "reason": decision.get("reason"),
-            "detail": decision.get("detail"),
-        },
-        "anomaly_after": still,
-    }
+def _verify_resolved(root: Path, day: str, *, ignore_pending: bool = True) -> dict[str, Any]:
+    """修復後の確認。pending は「修復試行のトリガ」なので検証時は無視する。"""
+    pending_backup = None
+    pending_fp = root / "logs" / "viewer_publish_pending.json"
+    if ignore_pending and pending_fp.is_file():
+        try:
+            pending_backup = pending_fp.read_text(encoding="utf-8")
+            pending_fp.unlink()
+        except Exception:
+            pending_backup = None
+    try:
+        snap = _fetch_public()
+        decision = decide_publish(root, day, snap)
+        still = classify_anomaly(decision, snap)
+        return {
+            "resolved": still is None,
+            "decision": {
+                "action": decision.get("action"),
+                "reason": decision.get("reason"),
+                "detail": decision.get("detail"),
+            },
+            "anomaly_after": still,
+        }
+    finally:
+        if pending_backup is not None:
+            try:
+                pending_fp.write_text(pending_backup, encoding="utf-8")
+            except Exception:
+                pass
 
 
 def _ensure_permanent_hooks(root: Path) -> dict[str, Any]:
@@ -565,57 +667,80 @@ def main() -> int:
     out = decide_publish(root, day, snap)
     out["ensure"] = ensure
 
-    anomaly = classify_anomaly(out)
+    anomaly = classify_anomaly(out, snap)
     if anomaly is None:
+        # 正常時は古い pending を掃除
+        _clear_pending(root)
         print(json.dumps(out, ensure_ascii=False, default=str))
         return 0
 
-    # --- 異常検知: 気付いて対応する ---
+    # --- 異常検知: 気付いて直ちに対応（購入時間を食わない） ---
     out["anomaly"] = anomaly
     _append_anomaly_log(
         root,
-        f"DETECT kind={anomaly['kind']} reason={anomaly['reason']} detail={anomaly.get('detail')}",
+        f"DETECT kind={anomaly['kind']} reason={anomaly['reason']} "
+        f"urgent={anomaly.get('urgent_purchase_window')} "
+        f"eta_min={anomaly.get('minutes_to_nearest_post')} "
+        f"detail={anomaly.get('detail')}",
     )
 
     notify_info: dict[str, Any] = {"skipped": True}
-    if _should_notify_anomaly(root, str(anomaly["kind"])):
+    # 発走間近は cooldown を bypass して必ず知らせる
+    force_notify = bool(anomaly.get("urgent_purchase_window"))
+    if force_notify or _should_notify_anomaly(root, str(anomaly["kind"])):
+        if force_notify:
+            # cooldown キーも更新しておく
+            _should_notify_anomaly(root, str(anomaly["kind"]))
         msg = (
             f"{anomaly['title']}\n"
             f"day={day}\n"
             f"reason={anomaly['reason']}\n"
             f"detail={anomaly.get('detail')}\n"
-            f"→ 自動で force publish を実行します"
+            f"→ 直ちに force publish で異変解消します（馬券購入時間確保）"
         )
         notify_info = _discord_notify(root, msg)
         notify_info["skipped"] = False
+        notify_info["forced"] = force_notify
         _append_anomaly_log(root, f"NOTIFY {notify_info}")
     out["notify"] = notify_info
 
     from force_publish_public_snapshot import run_publish
 
+    def _slim_result(result: Any) -> dict[str, Any]:
+        if isinstance(result, dict):
+            slim = {
+                k: result.get(k)
+                for k in (
+                    "ok",
+                    "via",
+                    "error",
+                    "race_count",
+                    "schedule_date",
+                    "cache_reflect",
+                    "n_races_cache",
+                )
+                if k in result
+            }
+            errs = result.get("export_errors") or result.get("errors")
+            if errs:
+                slim["errors"] = list(errs)[:8]
+            return slim
+        return {"raw": str(result)[:500]}
+
     result = run_publish(force=True)
-    if isinstance(result, dict):
-        slim = {
-            k: result.get(k)
-            for k in (
-                "ok",
-                "via",
-                "error",
-                "race_count",
-                "schedule_date",
-                "cache_reflect",
-                "n_races_cache",
-            )
-            if k in result
-        }
-        errs = result.get("export_errors") or result.get("errors")
-        if errs:
-            slim["errors"] = list(errs)[:8]
-        out["result"] = slim
-    else:
-        out["result"] = {"raw": str(result)[:500]}
+    out["result"] = _slim_result(result)
 
     verify = _verify_resolved(root, day)
+    # 1回で解消しない場合、購入時間帯は間を置かず再試行
+    if not verify.get("resolved"):
+        _append_anomaly_log(root, "RETRY immediate second force_publish")
+        result2 = run_publish(force=True)
+        out["result_retry"] = _slim_result(result2)
+        verify = _verify_resolved(root, day)
+        if isinstance(result2, dict) and result2.get("ok"):
+            result = result2
+            out["result"] = out["result_retry"]
+
     out["verify"] = {
         "resolved": verify.get("resolved"),
         "decision": verify.get("decision"),
@@ -629,7 +754,7 @@ def main() -> int:
     # 修復失敗は必ず通知（cooldown 無視）
     if not verify.get("resolved"):
         fail_msg = (
-            "【異常・未解消】閲覧サイト自動更新の修復に失敗しました\n"
+            "【異常・未解消】閲覧サイト自動更新の修復に失敗しました（購入時間に影響し得ます）\n"
             f"day={day}\n"
             f"detect={anomaly['kind']}\n"
             f"publish={out.get('result')}\n"
@@ -638,10 +763,11 @@ def main() -> int:
         out["notify_failed"] = _discord_notify(root, fail_msg)
         _append_anomaly_log(root, f"NOTIFY_FAIL {out['notify_failed']}")
     else:
+        _clear_pending(root)
         # 復旧も一度知らせる（同 kind の cooldown 内ならスキップ）
         if _should_notify_anomaly(root, f"recovered:{anomaly['kind']}"):
             ok_msg = (
-                "【復旧】閲覧サイトの公開遅れを自動修復しました\n"
+                "【復旧】閲覧サイトの公開遅れを直ちに自動修復しました\n"
                 f"day={day}\n"
                 f"was={anomaly['kind']}\n"
                 f"via={(out.get('result') or {}).get('via')}"

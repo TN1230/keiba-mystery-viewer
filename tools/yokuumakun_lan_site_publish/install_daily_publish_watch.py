@@ -17,6 +17,7 @@ def main() -> int:
         "morning_bulk_publish_watch.py",
         "force_publish_public_snapshot.py",
         "patch_pre_race_publish_on_success.py",
+        "viewer_publish_wake.py",
     ):
         src = here / name
         dst = root / name

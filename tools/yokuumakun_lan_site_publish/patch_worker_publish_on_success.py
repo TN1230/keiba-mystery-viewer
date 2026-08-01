@@ -17,16 +17,29 @@ def _inject_block(indent: str) -> str:
         BEGIN,
         "try:",
         '    _log("publishing public viewer snapshot after quality ok")',
+        "    _pub_ok = False",
         "    try:",
         "        from force_publish_public_snapshot import run_publish as _force_pub",
         "        _pub = _force_pub(force=True)",
+        "        _pub_ok = bool(isinstance(_pub, dict) and _pub.get('ok'))",
         '        _log(f"publish result={_pub}")',
         "    except Exception:",
         "        from hwm import _publish_public_viewer_snapshot",
         "        _publish_public_viewer_snapshot(force=True)",
+        "        _pub_ok = True",
         '        _log("publish via hwm._publish_public_viewer_snapshot ok")',
+        "    if not _pub_ok:",
+        '        raise RuntimeError("public_viewer_publish_returned_not_ok")',
         "except Exception as _pub_e:",
         '    _log(f"publish failed: {type(_pub_e).__name__}: {_pub_e}")',
+        "    try:",
+        "        from viewer_publish_wake import mark_pending_and_wake",
+        "        mark_pending_and_wake(",
+        '            reason="morning_bulk_publish_failed",',
+        '            error=f"{type(_pub_e).__name__}: {_pub_e}",',
+        "        )",
+        "    except Exception:",
+        "        pass",
         END,
     ]
     return "\n".join(indent + ln if ln else ln for ln in lines) + "\n"
@@ -46,11 +59,12 @@ def patch(root: Path) -> None:
     if not worker.is_file():
         raise SystemExit(f"missing {worker}")
 
-    # force_publish スクリプトをルートへ（既に同ファイルならスキップ）
-    src = Path(__file__).resolve().parent / "force_publish_public_snapshot.py"
-    dst = root / "force_publish_public_snapshot.py"
-    if src.is_file() and src.resolve() != dst.resolve():
-        shutil.copy2(src, dst)
+    here = Path(__file__).resolve().parent
+    for name in ("force_publish_public_snapshot.py", "viewer_publish_wake.py"):
+        src = here / name
+        dst = root / name
+        if src.is_file() and src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
 
     text = worker.read_text(encoding="utf-8", errors="replace")
     text = _strip(text)

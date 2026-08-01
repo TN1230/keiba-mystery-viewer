@@ -13,19 +13,24 @@
 1. **今すぐ** キャッシュから `latest.json` を強制公開（空 snapshot は成功にしない）
 2. **朝一斉ワーカー**成功時に自動 publish（恒久パッチ）
 3. **直前予想ワーカー**成功時（`update_races_cache_entry` 直後）に自動 publish（恒久パッチ）
-4. **systemd timer**（05:30 起動後 **2分ごと**）で
+4. **systemd timer**（05:30 起動後 **30秒ごと**）で
    - latest が空/前日
    - またはキャッシュの `predicted_at` が公開より新しい（max / race_id 単位）
    - または直前窓のレースが朝の予想のまま（他レースの直近 publish でもスキップしない）
+   - または publish 失敗で立った **pending** フラグ
    なら再 publish
-5. admin の `IndentationError` 時はバックアップから自動復旧
-6. 管理画面「② 閲覧サイト強制公開」＋ `POST /admin/remote-bootstrap` の
+5. **publish 失敗時は即時 wake**: `viewer_publish_wake.py` が pending を書き、
+   timer を待たず `yokuum-morning-publish-watch.service` を oneshot 起動。
+   発走間近は「【異常・発走間近】」として通知し、未解消なら直後に再試行する
+   （馬券購入時間を確保するため）。
+6. admin の `IndentationError` 時はバックアップから自動復旧
+7. 管理画面「② 閲覧サイト強制公開」＋ `POST /admin/remote-bootstrap` の
    `install_lan_site_publish` / `force_publish`
 
 ## 今すぐレースをサイトへ反映 / 品質修復（最短）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/pre-race-viewer-auto-update-a29c/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/viewer-publish-lag-immediate-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
 ```
 
 成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数がレースごとに異なる・出馬表が推定3着内率順、を確認。
@@ -40,7 +45,7 @@ gate の `score=25` や壊れた日の定数 `5` はホームズ指数として�
 ## サーバーで実行（恒久パッチ込み）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/pre-race-viewer-auto-update-a29c/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/viewer-publish-lag-immediate-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
 ```
 
 ## Windows LAN（先週と同じ paramiko）
@@ -57,16 +62,18 @@ systemctl list-timers 'yokuum-morning-publish-watch.timer' --no-pager
 # 直前反映: 直近発走レースの predicted_at が朝一斉(10時台)ではなく発走約15分前になっていること
 ```
 
-## 異常検知（気付いて対応）
-`morning_bulk_publish_watch.py` は 2 分ごとに次を行います。
+## 異常検知（気付いて直ちに対応）
+公開遅れは馬券購入時間を直接食うため、次の即時経路で異変解消します。
 
-1. **異常判定**: 直前予想キャッシュが新しいのに公開 `latest.json` が止まっている等
-2. **Discord 通知**（エラー系統 Webhook、15分 cooldown）
-3. **自動 force publish**
-4. **修復確認** → 失敗時は必ず再通知 / 成功時は復旧通知
+1. **一次**: 直前/朝一斉成功直後の inject publish
+2. **失敗時即時**: `viewer_publish_wake.mark_pending_and_wake` → oneshot で watch 起動
+3. **安全網**: timer 30 秒ごとに遅延検出 → Discord 通知 → force publish → 検証
+4. 発走間近（約25分以内）は「【異常・発走間近】」で通知し、未解消なら直後に再試行
 5. 状態を `ops/viewer_publish_anomaly_last.json` と `logs/viewer_publish_anomaly.log` に記録
 
 ```bash
 tail -n 50 /opt/yokuumakun_auto-x/logs/viewer_publish_anomaly.log
+ls -l /opt/yokuumakun_auto-x/logs/viewer_publish_pending.json
+systemctl status yokuum-morning-publish-watch.timer --no-pager
 curl -fsSL https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/ops/viewer_publish_anomaly_last.json
 ```

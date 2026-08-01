@@ -5,7 +5,7 @@
 #  3) 明日以降の保険として systemd timer を入れる
 set -uo pipefail
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/pre-race-viewer-auto-update-a29c}"
+BRANCH="${1:-cursor/viewer-publish-lag-immediate-19c2}"
 BASE_RAW="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_lan_site_publish"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 export YOKUMAKUN_SUDO_PASS="$SUDO_PASS"
@@ -42,6 +42,7 @@ for f in \
   official_republish_from_cache.py \
   patch_worker_publish_on_success.py \
   patch_pre_race_publish_on_success.py \
+  viewer_publish_wake.py \
   install_publish_endpoint.py \
   install_remote_bootstrap_endpoint.py \
   morning_bulk_publish_watch.py \
@@ -94,11 +95,12 @@ echo "install_publish_endpoint rc=$?"
 python3 "$TMP/install_remote_bootstrap_endpoint.py" "$ROOT"
 echo "install_remote_bootstrap rc=$?"
 cp -f "$TMP/morning_bulk_publish_watch.py" "$ROOT/" 2>/dev/null || true
+cp -f "$TMP/viewer_publish_wake.py" "$ROOT/" 2>/dev/null || true
 mkdir -p "$ROOT/server_deployment"
 cp -f "$TMP"/yokuum-morning-publish-watch.*.example "$ROOT/server_deployment/" 2>/dev/null || true
 cd "$ROOT"
 set +e
-.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
+.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py viewer_publish_wake.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
 echo "py_compile_tools rc=$?"
 .venv/bin/python -m py_compile admin_panel_api.py
 ADMIN_COMPILE=$?
