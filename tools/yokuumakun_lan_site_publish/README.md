@@ -56,3 +56,17 @@ systemctl is-enabled yokuum-morning-publish-watch.timer
 systemctl list-timers 'yokuum-morning-publish-watch.timer' --no-pager
 # 直前反映: 直近発走レースの predicted_at が朝一斉(10時台)ではなく発走約15分前になっていること
 ```
+
+## 異常検知（気付いて対応）
+`morning_bulk_publish_watch.py` は 2 分ごとに次を行います。
+
+1. **異常判定**: 直前予想キャッシュが新しいのに公開 `latest.json` が止まっている等
+2. **Discord 通知**（エラー系統 Webhook、15分 cooldown）
+3. **自動 force publish**
+4. **修復確認** → 失敗時は必ず再通知 / 成功時は復旧通知
+5. 状態を `ops/viewer_publish_anomaly_last.json` と `logs/viewer_publish_anomaly.log` に記録
+
+```bash
+tail -n 50 /opt/yokuumakun_auto-x/logs/viewer_publish_anomaly.log
+curl -fsSL https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/ops/viewer_publish_anomaly_last.json
+```

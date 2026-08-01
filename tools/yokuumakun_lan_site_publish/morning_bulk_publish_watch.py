@@ -329,6 +329,179 @@ def decide_publish(root: Path, day: str, snap: dict[str, Any] | None) -> dict[st
     return out
 
 
+# 直前予想済みなのに閲覧サイトが止まっている = 運用異常
+_ANOMALY_REASONS = {
+    "cache_newer_than_public": "viewer_publish_lag_after_predict",
+    "stale_during_prerace": "viewer_publish_lag_in_prerace_window",
+    "empty_or_wrong_day": "viewer_snapshot_empty_or_wrong_day",
+}
+_ANOMALY_STATE_NAME = "viewer_publish_anomaly_state.json"
+_ANOMALY_LOG_NAME = "viewer_publish_anomaly.log"
+_ANOMALY_NOTIFY_COOLDOWN = timedelta(minutes=15)
+
+
+def classify_anomaly(decision: dict[str, Any]) -> dict[str, Any] | None:
+    """decide_publish 結果から「異常」を明示分類する。"""
+    if decision.get("action") != "force_publish":
+        return None
+    reason = str(decision.get("reason") or "")
+    kind = _ANOMALY_REASONS.get(reason)
+    if not kind:
+        return None
+    titles = {
+        "viewer_publish_lag_after_predict": (
+            "【異常】直前予想はキャッシュ更新済みだが、閲覧サイト latest.json が止まっています"
+        ),
+        "viewer_publish_lag_in_prerace_window": (
+            "【異常】直前窓のレースで公開 predicted_at が古いままです（キャッシュは新しい）"
+        ),
+        "viewer_snapshot_empty_or_wrong_day": (
+            "【異常】閲覧サイト snapshot が空、または開催日不一致です"
+        ),
+    }
+    return {
+        "anomaly": True,
+        "kind": kind,
+        "reason": reason,
+        "title": titles.get(kind, "【異常】閲覧サイト公開の取りこぼし"),
+        "detail": decision.get("detail") or reason,
+        "day": decision.get("day"),
+    }
+
+
+def _anomaly_paths(root: Path) -> tuple[Path, Path]:
+    logs = root / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    return logs / _ANOMALY_STATE_NAME, logs / _ANOMALY_LOG_NAME
+
+
+def _load_anomaly_state(root: Path) -> dict[str, Any]:
+    state_path, _ = _anomaly_paths(root)
+    if not state_path.is_file():
+        return {}
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_anomaly_state(root: Path, state: dict[str, Any]) -> None:
+    state_path, _ = _anomaly_paths(root)
+    try:
+        state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def _append_anomaly_log(root: Path, line: str) -> None:
+    _, log_path = _anomaly_paths(root)
+    try:
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now(_JST).isoformat(timespec='seconds')}] {line}\n")
+    except Exception:
+        pass
+
+
+def _should_notify_anomaly(root: Path, kind: str) -> bool:
+    """同一 kind の連打通知を cooldown で抑止する。"""
+    state = _load_anomaly_state(root)
+    key = f"last_notify_{kind}"
+    last = _parse_dt(state.get(key))
+    now = datetime.now(_JST)
+    if last is not None and now - last < _ANOMALY_NOTIFY_COOLDOWN:
+        return False
+    state[key] = now.isoformat(timespec="seconds")
+    state["last_kind"] = kind
+    _save_anomaly_state(root, state)
+    return True
+
+
+def _discord_notify(root: Path, content: str) -> dict[str, Any]:
+    """エラー系統 Discord に異常を通知。hwm ヘルパがあればそれを使う。"""
+    text = (content or "")[:1900]
+    # 1) hwm 経路
+    try:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        import hwm  # type: ignore
+
+        url = ""
+        if hasattr(hwm, "_discord_error_webhook_url"):
+            url = str(hwm._discord_error_webhook_url() or "").strip()
+        if url and hasattr(hwm, "_discord_send_webhook"):
+            ok, msg = hwm._discord_send_webhook(url, text)
+            return {"ok": bool(ok), "via": "hwm", "message": str(msg)[:200]}
+    except Exception as e:
+        hwm_err = f"{type(e).__name__}: {e}"
+    else:
+        hwm_err = "hwm_webhook_unavailable"
+
+    # 2) .env 直接
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(root / ".env", override=False)
+    except Exception:
+        pass
+    url = ""
+    for key in (
+        "DISCORD_WEBHOOK_ERROR",
+        "DISCORD_WEBHOOK_URL_3",
+        "DISCORD_WEBHOOK_FAILURE",
+        "DISCORD_WEBHOOK_TEST_ALWAYS",
+    ):
+        url = (os.environ.get(key) or "").strip().strip('"')
+        if url:
+            break
+    if not url:
+        return {"ok": False, "via": "none", "message": hwm_err}
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps({"content": text}, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            _ = resp.read()
+            return {"ok": 200 <= resp.status < 300, "via": "env", "status": resp.status}
+    except Exception as e:
+        return {"ok": False, "via": "env", "message": f"{type(e).__name__}: {e}"}
+
+
+def _upload_anomaly_status(root: Path, payload: dict[str, Any]) -> str | None:
+    try:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
+
+        url, err = upload_json_object("ops/viewer_publish_anomaly_last.json", payload)
+        if err:
+            return f"upload_err={err}"
+        return f"upload_ok={url}"
+    except Exception as e:
+        return f"upload_exc={type(e).__name__}:{e}"
+
+
+def _verify_resolved(root: Path, day: str) -> dict[str, Any]:
+    snap = _fetch_public()
+    decision = decide_publish(root, day, snap)
+    still = classify_anomaly(decision)
+    return {
+        "resolved": still is None,
+        "decision": {
+            "action": decision.get("action"),
+            "reason": decision.get("reason"),
+            "detail": decision.get("detail"),
+        },
+        "anomaly_after": still,
+    }
+
+
 def _ensure_permanent_hooks(root: Path) -> dict[str, Any]:
     """指示なしで翌日以降も動くよう、パッチ欠落・timer 停止を自己修復する。"""
     info: dict[str, Any] = {"patched_pre_race": False, "timer_ok": None}
@@ -392,14 +565,35 @@ def main() -> int:
     out = decide_publish(root, day, snap)
     out["ensure"] = ensure
 
-    if out.get("action") != "force_publish":
+    anomaly = classify_anomaly(out)
+    if anomaly is None:
         print(json.dumps(out, ensure_ascii=False, default=str))
         return 0
+
+    # --- 異常検知: 気付いて対応する ---
+    out["anomaly"] = anomaly
+    _append_anomaly_log(
+        root,
+        f"DETECT kind={anomaly['kind']} reason={anomaly['reason']} detail={anomaly.get('detail')}",
+    )
+
+    notify_info: dict[str, Any] = {"skipped": True}
+    if _should_notify_anomaly(root, str(anomaly["kind"])):
+        msg = (
+            f"{anomaly['title']}\n"
+            f"day={day}\n"
+            f"reason={anomaly['reason']}\n"
+            f"detail={anomaly.get('detail')}\n"
+            f"→ 自動で force publish を実行します"
+        )
+        notify_info = _discord_notify(root, msg)
+        notify_info["skipped"] = False
+        _append_anomaly_log(root, f"NOTIFY {notify_info}")
+    out["notify"] = notify_info
 
     from force_publish_public_snapshot import run_publish
 
     result = run_publish(force=True)
-    # 巨大・循環しうる attempts/notes は要約だけ残す
     if isinstance(result, dict):
         slim = {
             k: result.get(k)
@@ -420,8 +614,55 @@ def main() -> int:
         out["result"] = slim
     else:
         out["result"] = {"raw": str(result)[:500]}
+
+    verify = _verify_resolved(root, day)
+    out["verify"] = {
+        "resolved": verify.get("resolved"),
+        "decision": verify.get("decision"),
+    }
+    _append_anomaly_log(
+        root,
+        f"REMEDIATE ok={bool(isinstance(result, dict) and result.get('ok'))} "
+        f"resolved={verify.get('resolved')} via={(out.get('result') or {}).get('via')}",
+    )
+
+    # 修復失敗は必ず通知（cooldown 無視）
+    if not verify.get("resolved"):
+        fail_msg = (
+            "【異常・未解消】閲覧サイト自動更新の修復に失敗しました\n"
+            f"day={day}\n"
+            f"detect={anomaly['kind']}\n"
+            f"publish={out.get('result')}\n"
+            f"after={verify.get('decision')}"
+        )
+        out["notify_failed"] = _discord_notify(root, fail_msg)
+        _append_anomaly_log(root, f"NOTIFY_FAIL {out['notify_failed']}")
+    else:
+        # 復旧も一度知らせる（同 kind の cooldown 内ならスキップ）
+        if _should_notify_anomaly(root, f"recovered:{anomaly['kind']}"):
+            ok_msg = (
+                "【復旧】閲覧サイトの公開遅れを自動修復しました\n"
+                f"day={day}\n"
+                f"was={anomaly['kind']}\n"
+                f"via={(out.get('result') or {}).get('via')}"
+            )
+            out["notify_recovered"] = _discord_notify(root, ok_msg)
+            _append_anomaly_log(root, f"NOTIFY_RECOVERED {out['notify_recovered']}")
+
+    status_payload = {
+        "updated_at": datetime.now(_JST).isoformat(timespec="seconds"),
+        "day": day,
+        "anomaly": anomaly,
+        "notify": out.get("notify"),
+        "result": out.get("result"),
+        "verify": out.get("verify"),
+        "ensure": ensure,
+    }
+    out["status_upload"] = _upload_anomaly_status(root, status_payload)
+
     print(json.dumps(out, ensure_ascii=False, default=str))
-    return 0 if isinstance(result, dict) and result.get("ok") else 1
+    ok = bool(isinstance(result, dict) and result.get("ok") and verify.get("resolved"))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

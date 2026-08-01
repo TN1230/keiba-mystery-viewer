@@ -514,6 +514,41 @@ class PublishWatchDecisionTests(unittest.TestCase):
         dt2 = _parse_dt(str(ts))
         self.assertIsNotNone(dt2)
 
+    def test_classify_anomaly_for_publish_lag(self) -> None:
+        from morning_bulk_publish_watch import classify_anomaly
+
+        a = classify_anomaly(
+            {
+                "action": "force_publish",
+                "reason": "cache_newer_than_public",
+                "detail": "cache_pred=...",
+                "day": "2026-08-01",
+            }
+        )
+        self.assertIsNotNone(a)
+        assert a is not None
+        self.assertTrue(a["anomaly"])
+        self.assertEqual(a["kind"], "viewer_publish_lag_after_predict")
+        self.assertIn("異常", a["title"])
+        self.assertIsNone(
+            classify_anomaly({"action": "noop", "reason": "already_fresh"})
+        )
+
+    def test_anomaly_notify_cooldown(self) -> None:
+        from morning_bulk_publish_watch import (
+            _should_notify_anomaly,
+            _load_anomaly_state,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "logs").mkdir()
+            self.assertTrue(_should_notify_anomaly(root, "viewer_publish_lag_after_predict"))
+            # 直後は cooldown
+            self.assertFalse(_should_notify_anomaly(root, "viewer_publish_lag_after_predict"))
+            st = _load_anomaly_state(root)
+            self.assertIn("last_notify_viewer_publish_lag_after_predict", st)
+
     def test_cache_newer_than_public_triggers_publish(self) -> None:
         from morning_bulk_publish_watch import decide_publish
         import pickle
