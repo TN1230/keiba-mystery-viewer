@@ -17,6 +17,7 @@
   const sessionHint = document.getElementById("sessionHint");
   const loginBtn = document.getElementById("loginBtn");
   const btnMorningBulk = document.getElementById("btnMorningBulk");
+  const btnForcePublish = document.getElementById("btnForcePublish");
   const btnModemReboot = document.getElementById("btnModemReboot");
   const btnOpsLogs = document.getElementById("btnOpsLogs");
   const btnLogout = document.getElementById("btnLogout");
@@ -163,6 +164,8 @@
       admin_login: "ログイン",
       admin_logout: "ログアウト",
       admin_morning_bulk_rerun: "一斉予想再実行",
+      admin_publish_public_snapshot: "閲覧サイト強制公開",
+      admin_remote_bootstrap: "リモート bootstrap",
       admin_modem_reboot: "モデム再起動",
     };
     return map[event] || event || "(不明)";
@@ -422,25 +425,87 @@
     }
   }
 
+  function tenkaiJstToday() {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Tokyo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+  }
+
+  function tenkaiDayArchiveUrl(day) {
+    const latest = String(cfg.SNAPSHOT_URL || "").trim();
+    if (!latest || latest.includes("YOUR_")) return "";
+    return latest.replace(/latest\.json(?:\?.*)?$/i, `${day}.json`);
+  }
+
+  function tenkaiCountRaces(data) {
+    const venues = Array.isArray(data && data.venues) ? data.venues : [];
+    return venues.reduce((acc, v) => acc + ((v && v.races) || []).length, 0);
+  }
+
+  async function fetchTenkaiJson(url) {
+    const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`予想データ取得失敗 (HTTP ${res.status})`);
+    return res.json();
+  }
+
   async function loadTenkaiSnapshot() {
     const url = String(cfg.SNAPSHOT_URL || "").trim();
     if (!url || url.includes("YOUR_")) {
       throw new Error("SNAPSHOT_URL が未設定です");
     }
-    const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error(`予想データ取得失敗 (HTTP ${res.status})`);
-    const data = await res.json();
-    const venues = Array.isArray(data.venues) ? data.venues : [];
-    const raceCount = Number(data.race_count || 0);
-    const nRaces = venues.reduce((acc, v) => acc + ((v && v.races) || []).length, 0);
-    if (!nRaces || raceCount === 0) {
-      const err = new Error("当日予想データがありません（race_count=0）");
-      err.code = "no_races";
-      throw err;
+    const day = tenkaiJstToday();
+    const candidates = [url];
+    const dayUrl = tenkaiDayArchiveUrl(day);
+    if (dayUrl && dayUrl !== url) candidates.push(dayUrl);
+
+    let lastErr = null;
+    for (const cand of candidates) {
+      try {
+        const data = await fetchTenkaiJson(cand);
+        const nRaces = tenkaiCountRaces(data);
+        const raceCount = Number(data.race_count || 0);
+        if (nRaces > 0 && raceCount !== 0) {
+          data._tenkai_source = cand.includes(`${day}.json`) ? "day_archive" : "latest";
+          return data;
+        }
+        // latest が cleared / 空なら day archive を続けて試す
+        lastErr = new Error("当日予想データがありません（race_count=0）");
+        lastErr.code = "no_races";
+      } catch (e) {
+        lastErr = e;
+      }
     }
-    return data;
+    throw lastErr || new Error("予想データを取得できませんでした");
+  }
+
+  function openTenkaiSimManual() {
+    const input = document.getElementById("tenkaiManualRaceId");
+    const raceId = String((input && input.value) || "").trim();
+    if (!raceId) {
+      setStatus(tenkaiSimStatus, "race_id を入力してください（例: 202608010501）", "error");
+      return;
+    }
+    const placeInput = document.getElementById("tenkaiManualPlace");
+    const rInput = document.getElementById("tenkaiManualR");
+    openTenkaiSim({
+      race_id: raceId,
+      place: String((placeInput && placeInput.value) || "").trim(),
+      R: String((rInput && rInput.value) || "").trim(),
+      schedule_date: (tenkaiSnap && tenkaiSnap.schedule_date) || tenkaiJstToday(),
+    });
   }
 
   async function showTenkaiSimPanel() {
@@ -455,32 +520,46 @@
     }
     try {
       tenkaiUrlTemplate = await resolveTenkaiUrlTemplate();
-      tenkaiSnap = await loadTenkaiSnapshot();
-      renderTenkaiVenueTabs();
-      renderTenkaiJumps();
-      const n = Number(tenkaiSnap.race_count || 0);
-      if (tenkaiSimMeta) {
-        tenkaiSimMeta.textContent =
-          `開催日 ${tenkaiSnap.schedule_date || "-"} / ${n}レース` +
-          (tenkaiUrlTemplate ? "" : "（URLテンプレート未解決）");
+      try {
+        tenkaiSnap = await loadTenkaiSnapshot();
+        renderTenkaiVenueTabs();
+        renderTenkaiJumps();
+        const n = tenkaiCountRaces(tenkaiSnap);
+        if (tenkaiSimMeta) {
+          const src = tenkaiSnap._tenkai_source === "day_archive" ? "（日付アーカイブ）" : "";
+          tenkaiSimMeta.textContent =
+            `開催日 ${tenkaiSnap.schedule_date || "-"} / ${n}レース${src}` +
+            (tenkaiUrlTemplate ? "" : "（URLテンプレート未解決）");
+        }
+        setStatus(
+          tenkaiSimStatus,
+          tenkaiUrlTemplate
+            ? "レースボタンを押すと別タブで開きます。race_id 直指定もできます。"
+            : "URLテンプレート未設定です。サーバーへ tenkai 導入（deploy_from_windows.ps1）を実行してください。",
+          tenkaiUrlTemplate ? "ok" : "error"
+        );
+      } catch (e) {
+        tenkaiSnap = null;
+        if (tenkaiVenueTabs) tenkaiVenueTabs.innerHTML = "";
+        if (tenkaiJumpButtons) {
+          tenkaiJumpButtons.innerHTML =
+            "<p class='hint'>レース一覧がありません。下の race_id 直指定で開けます。</p>";
+        }
+        const msg =
+          e && e.code === "no_races"
+            ? "公開中のレース一覧がありません（EOD後など）。race_id を直指定して開けます。"
+            : e.message || String(e);
+        if (tenkaiSimMeta) tenkaiSimMeta.textContent = msg;
+        setStatus(
+          tenkaiSimStatus,
+          tenkaiUrlTemplate
+            ? msg
+            : `${msg} / URL未解決。deploy_from_windows.ps1 で /tenkai を導入してください。`,
+          tenkaiUrlTemplate ? "ok" : "error"
+        );
       }
-      setStatus(
-        tenkaiSimStatus,
-        tenkaiUrlTemplate
-          ? "レースボタンを押すと別タブで開きます"
-          : "URLテンプレート未設定です。TENKAI_SIM_URL_TEMPLATE を確認してください。",
-        tenkaiUrlTemplate ? "ok" : "error"
-      );
     } catch (e) {
-      tenkaiSnap = null;
-      if (tenkaiVenueTabs) tenkaiVenueTabs.innerHTML = "";
-      if (tenkaiJumpButtons) tenkaiJumpButtons.innerHTML = "";
-      const msg =
-        e && e.code === "no_races"
-          ? "当日予想データがありません。一斉予想後に再度お試しください。"
-          : e.message || String(e);
-      if (tenkaiSimMeta) tenkaiSimMeta.textContent = msg;
-      setStatus(tenkaiSimStatus, msg, "error");
+      setStatus(tenkaiSimStatus, e.message || String(e), "error");
     }
   }
 
@@ -501,6 +580,10 @@
         hideTenkaiSimPanel();
         setStatus(menuStatus, "");
       });
+    }
+    const btnManual = document.getElementById("btnTenkaiManualOpen");
+    if (btnManual) {
+      btnManual.addEventListener("click", () => openTenkaiSimManual());
     }
   }
   // --- END TEMP: TENKAI_SIM_LAUNCH ---
@@ -664,6 +747,60 @@
       "一斉予想を再実行します。ログアウト後もサーバー上で処理は継続します。よろしいですか？"
     );
   });
+
+  if (btnForcePublish) {
+    btnForcePublish.addEventListener("click", async () => {
+      const ok = window.confirm(
+        "キャッシュから閲覧サイト（latest.json）を強制公開します。直前予想の取りこぼし解消に使います。よろしいですか？"
+      );
+      if (!ok) return;
+      setStatus(menuStatus, "実行中…");
+      btnForcePublish.disabled = true;
+      try {
+        const token = getToken();
+        if (!token) {
+          await forceLogout("セッションがありません。再ログインしてください。");
+          return;
+        }
+        let { res, data } = await api("/admin/publish-public-snapshot", {
+          method: "POST",
+          token,
+        });
+        // エンドポイント未導入時は remote-bootstrap の force_publish にフォールバック
+        if (res.status === 404) {
+          ({ res, data } = await api("/admin/remote-bootstrap", {
+            method: "POST",
+            token,
+            body: { action: "force_publish" },
+          }));
+        }
+        if (res.status === 401) {
+          await forceLogout(
+            "セッションが切れました。開始済みの処理はサーバー上で継続している場合があります。再ログインしてください。"
+          );
+          return;
+        }
+        if (!res.ok || !data.ok) {
+          setStatus(
+            menuStatus,
+            data.message || data.error || "強制公開に失敗しました",
+            "error"
+          );
+          return;
+        }
+        const raceCount = data.race_count ?? data.result?.race_count;
+        const msg =
+          raceCount != null
+            ? `公開しました（race_count=${raceCount}）`
+            : data.message || "閲覧サイトを公開しました";
+        setStatus(menuStatus, msg, "ok");
+      } catch (e) {
+        setStatus(menuStatus, e.message || String(e), "error");
+      } finally {
+        btnForcePublish.disabled = false;
+      }
+    });
+  }
 
   btnModemReboot.addEventListener("click", () => {
     runAction(

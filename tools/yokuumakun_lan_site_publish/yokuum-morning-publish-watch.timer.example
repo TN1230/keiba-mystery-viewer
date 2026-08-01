@@ -1,0 +1,15 @@
+[Unit]
+Description=Timer: publish public snapshot after morning bulk / pre-race if stale
+
+[Timer]
+# 直前は発走約15分前更新。公開遅れは馬券購入時間を直接食うため
+# 開催帯は 30 秒ごとに監視（スクリプト側が不要時は noop）。
+# 失敗時は viewer_publish_wake が oneshot を即起動するので、これより早く動く。
+OnCalendar=*-*-* 05:30:00
+OnUnitActiveSec=30s
+AccuracySec=1s
+Persistent=true
+Unit=yokuum-morning-publish-watch.service
+
+[Install]
+WantedBy=timers.target

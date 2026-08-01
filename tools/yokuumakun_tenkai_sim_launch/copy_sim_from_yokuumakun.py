@@ -52,11 +52,24 @@ def default_source_candidates() -> list[Path]:
             Path(r"C:\Users\mocco\Desktop\yokuumakun"),
             Path.home() / "Desktop" / "yokuumakun",
             Path("/home/tn/yokuumakun"),
+            Path("/home/tn/Desktop/yokuumakun"),
+            Path("/home/tn/デスクトップ/yokuumakun"),
             Path("/opt/yokuumakun"),
             Path("/opt/yokuumakun_auto"),
             Path("/opt/yokuumakun_auto-r"),
+            Path("/opt/yokuumakun_auto-x"),  # 既にコピー済みの場合
         ]
     )
+    # サーバー上の広めの探索（浅い）
+    for base in (Path("/home/tn"), Path("/opt"), Path.home()):
+        if not base.is_dir():
+            continue
+        try:
+            for p in base.iterdir():
+                if p.is_dir() and (p / SIM_ENTRY).is_file():
+                    cands.append(p)
+        except Exception:
+            pass
     return cands
 
 

@@ -1,6 +1,7 @@
 (() => {
   const cfg = window.PUBLIC_VIEWER_CONFIG || {};
   const SHUTUBA_SORT_KEY = "mystery_viewer_shutuba_sort";
+  const JUMP_LAYOUT_KEY = "mystery_viewer_jump_layout";
 
   function loadShutubaSort() {
     try {
@@ -12,11 +13,22 @@
     return "default";
   }
 
+  function loadJumpLayout() {
+    try {
+      const v = localStorage.getItem(JUMP_LAYOUT_KEY);
+      if (v === "timeline" || v === "venue") return v;
+    } catch (_) {
+      /* ignore */
+    }
+    return "venue";
+  }
+
   const state = {
     data: null,
     place: null,
     raceId: null,
     shutubaSort: loadShutubaSort(),
+    jumpLayout: loadJumpLayout(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -131,6 +143,63 @@
     }
   }
 
+  function allRaces() {
+    const out = [];
+    for (const v of venues()) {
+      const place = v && v.place;
+      for (const r of v.races || []) {
+        // 発走表グリッドは place 必須。レース側に無いときは会場名で補う
+        out.push(r.place ? r : { ...r, place });
+      }
+    }
+    return out;
+  }
+
+  function normalizeStartTime(st) {
+    const m = String(st || "").trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "";
+    return `${String(m[1]).padStart(2, "0")}:${m[2]}`;
+  }
+
+  function raceStartDate(race, scheduleDate) {
+    const hm = normalizeStartTime(race && race.start_time);
+    const day = String(scheduleDate || (state.data && state.data.schedule_date) || "").trim();
+    if (!hm || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const d = new Date(`${day}T${hm}:00+09:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  /** 最終更新時刻以降で、最も近い未発走レース */
+  function nearestPrepostRace(raceList) {
+    const list = Array.isArray(raceList) ? raceList : allRaces();
+    const updatedRaw = state.data && state.data.updated_at;
+    let ref = updatedRaw ? new Date(updatedRaw) : new Date();
+    if (Number.isNaN(ref.getTime())) ref = new Date();
+    // updated_at がタイムゾーン無しのとき JST として扱う
+    if (updatedRaw && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(String(updatedRaw))) {
+      const m = String(updatedRaw).match(
+        /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}(?::\d{2})?)/
+      );
+      if (m) {
+        const t = new Date(`${m[1]}T${m[2].length === 5 ? `${m[2]}:00` : m[2]}+09:00`);
+        if (!Number.isNaN(t.getTime())) ref = t;
+      }
+    }
+    const day = state.data && state.data.schedule_date;
+    let best = null;
+    let bestDiff = Infinity;
+    for (const r of list) {
+      const t = raceStartDate(r, day);
+      if (!t) continue;
+      const diff = t.getTime() - ref.getTime();
+      if (diff > 0 && diff < bestDiff) {
+        bestDiff = diff;
+        best = r;
+      }
+    }
+    return best;
+  }
+
   function fillVenueTabs(container) {
     if (!container) return;
     container.innerHTML = "";
@@ -142,10 +211,16 @@
     if (!state.place || !list.some((v) => v.place === state.place)) {
       state.place = list[0].place;
     }
+    const nearest = nearestPrepostRace();
+    const nearestPlace = nearest && nearest.place;
+    // 発走表モードでは会場タブはマトリクス用のため残す（ジャンプ本体は全場スコアボード）
+    container.hidden = false;
     for (const v of list) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "tab" + (v.place === state.place ? " active" : "");
+      let cls = "tab" + (v.place === state.place ? " active" : "");
+      if (nearestPlace && v.place === nearestPlace) cls += " is-nearest-prepost";
+      b.className = cls;
       b.textContent = v.place;
       b.setAttribute("aria-pressed", v.place === state.place ? "true" : "false");
       b.addEventListener("click", () => {
@@ -283,28 +358,219 @@
     return "jump";
   }
 
-  function renderJumps() {
-    const boxes = [$("jumpButtons"), $("jumpButtonsSidebar")].filter(Boolean);
-    const v = currentVenue();
-    for (const box of boxes) {
-      box.innerHTML = "";
-      if (!v) continue;
-      for (const r of v.races || []) {
-        const b = document.createElement("button");
-        b.type = "button";
-        const selected = String(r.race_id) === String(state.raceId);
-        b.className = jumpClass(r.holmes_index_rank) + (selected ? " is-selected" : "");
-        const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
-        b.textContent = `${rn}R`;
-        b.setAttribute("aria-pressed", selected ? "true" : "false");
-        const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
-          ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
-          : `${r.place} ${rn}R`;
-        b.title = tip;
-        b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
-        box.appendChild(b);
-      }
+  function syncJumpLayoutControls() {
+    const mode = state.jumpLayout === "timeline" ? "timeline" : "venue";
+    document.querySelectorAll("[data-jump-layout]").forEach((btn) => {
+      const active = btn.getAttribute("data-jump-layout") === mode;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function setJumpLayout(mode) {
+    state.jumpLayout = mode === "timeline" ? "timeline" : "venue";
+    try {
+      localStorage.setItem(JUMP_LAYOUT_KEY, state.jumpLayout);
+    } catch (_) {
+      /* ignore */
     }
+    syncJumpLayoutControls();
+    renderJumps();
+  }
+
+  function makeJumpButton(r, { nearestId } = {}) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("data-rid", String(r.race_id || ""));
+    b.setAttribute("data-place", String(r.place || ""));
+    const selected = String(r.race_id) === String(state.raceId);
+    const nearest = nearestId != null && String(r.race_id) === String(nearestId);
+    let cls = jumpClass(r.holmes_index_rank);
+    if (selected) cls += " is-selected";
+    if (nearest) cls += " is-nearest-prepost";
+    b.className = cls;
+    const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
+    b.textContent = `${rn}R`;
+    b.setAttribute("aria-pressed", selected ? "true" : "false");
+    const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
+      ? `${r.place} ${rn}R ${normalizeStartTime(r.start_time)}（${r.holmes_rank_text}）`
+      : `${r.place} ${rn}R ${normalizeStartTime(r.start_time)}`.trim();
+    b.title = tip;
+    b.addEventListener("click", () => selectRace(r.race_id, r.place, { scroll: false }));
+    return b;
+  }
+
+  /** 選択状態だけ更新（発走表スクロール位置を維持） */
+  function syncJumpSelection() {
+    const rid = String(state.raceId || "");
+    const place = String(state.place || "");
+    document.querySelectorAll(".jump[data-rid]").forEach((b) => {
+      const selected = String(b.getAttribute("data-rid") || "") === rid;
+      b.classList.toggle("is-selected", selected);
+      b.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+    document.querySelectorAll(".jump-scoreboard-place").forEach((th) => {
+      th.classList.toggle("is-active-place", th.textContent === place);
+    });
+  }
+
+  function captureJumpScrollPositions() {
+    const out = new Map();
+    for (const id of ["jumpButtons", "jumpButtonsSidebar"]) {
+      const el = $(id);
+      if (!el) continue;
+      const sc = el.querySelector(".jump-timeline-scroll");
+      if (sc) out.set(id, { top: sc.scrollTop, left: sc.scrollLeft });
+    }
+    return out;
+  }
+
+  function restoreJumpScrollPositions(saved) {
+    if (!saved || !saved.size) return;
+    for (const [id, pos] of saved) {
+      const el = $(id);
+      const sc = el && el.querySelector(".jump-timeline-scroll");
+      if (!sc || !pos) continue;
+      sc.scrollTop = pos.top;
+      sc.scrollLeft = pos.left;
+    }
+  }
+
+  function renderJumpsVenue(box, { sidebar }) {
+    box.className = sidebar ? "jump-row sidebar-jump-row" : "jump-row";
+    box.innerHTML = "";
+    const v = currentVenue();
+    if (!v) return;
+    const nearest = nearestPrepostRace(v.races || []);
+    const nearestId = nearest && nearest.race_id;
+    for (const r of v.races || []) {
+      box.appendChild(makeJumpButton(r, { nearestId }));
+    }
+  }
+
+  function renderJumpsTimeline(box, { sidebar }) {
+    box.className = sidebar ? "jump-timeline sidebar-jump-timeline" : "jump-timeline";
+    box.innerHTML = "";
+    const placeList = venues().map((v) => v.place).filter(Boolean);
+    const races = allRaces();
+    if (!placeList.length || !races.length) {
+      box.innerHTML = "<p class='hint'>発走表データがありません</p>";
+      return;
+    }
+    const times = [];
+    const seen = new Set();
+    for (const r of races) {
+      const t = normalizeStartTime(r.start_time);
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      times.push(t);
+    }
+    times.sort();
+    if (!times.length) {
+      box.innerHTML = "<p class='hint'>発走時刻がありません</p>";
+      return;
+    }
+
+    const byKey = new Map();
+    for (const r of races) {
+      const t = normalizeStartTime(r.start_time);
+      const place = r.place;
+      if (!t || !place) continue;
+      const key = `${t}||${place}`;
+      // 同一時刻・同一場は R 昇順の先頭を採用
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, r);
+        continue;
+      }
+      const rn = Number.parseInt(String(r.R || "").replace(/[Rr]$/, ""), 10);
+      const pn = Number.parseInt(String(prev.R || "").replace(/[Rr]$/, ""), 10);
+      if (Number.isFinite(rn) && (!Number.isFinite(pn) || rn < pn)) byKey.set(key, r);
+    }
+
+    const nearest = nearestPrepostRace(races);
+    const nearestId = nearest && nearest.race_id;
+    const nearestTime = nearest ? normalizeStartTime(nearest.start_time) : "";
+
+    const scroll = document.createElement("div");
+    scroll.className = "jump-timeline-scroll";
+    const table = document.createElement("table");
+    table.className = "jump-scoreboard";
+    table.setAttribute("aria-label", "発走表順レースジャンプ");
+
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "jump-scoreboard-corner";
+    corner.textContent = "発走";
+    hr.appendChild(corner);
+    for (const place of placeList) {
+      const th = document.createElement("th");
+      th.className = "jump-scoreboard-place" + (place === state.place ? " is-active-place" : "");
+      th.textContent = place;
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const t of times) {
+      const tr = document.createElement("tr");
+      if (nearestTime && t === nearestTime) tr.className = "is-nearest-row";
+      const th = document.createElement("th");
+      th.className = "jump-scoreboard-time";
+      th.scope = "row";
+      th.textContent = t;
+      tr.appendChild(th);
+      for (const place of placeList) {
+        const td = document.createElement("td");
+        const r = byKey.get(`${t}||${place}`);
+        if (!r) {
+          td.className = "jump-scoreboard-cell is-empty";
+          const dot = document.createElement("span");
+          dot.className = "jump-scoreboard-dot";
+          dot.setAttribute("aria-hidden", "true");
+          td.appendChild(dot);
+        } else {
+          td.className = "jump-scoreboard-cell";
+          const inner = document.createElement("div");
+          inner.className = "jump-scoreboard-cell-inner";
+          inner.appendChild(makeJumpButton(r, { nearestId }));
+          td.appendChild(inner);
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    box.appendChild(scroll);
+  }
+
+  function renderJumps() {
+    syncJumpLayoutControls();
+    const savedScroll = captureJumpScrollPositions();
+    const targets = [
+      { el: $("jumpButtons"), sidebar: false },
+      { el: $("jumpButtonsSidebar"), sidebar: true },
+    ];
+    const timeline = state.jumpLayout === "timeline";
+    for (const { el, sidebar } of targets) {
+      if (!el) continue;
+      if (timeline) renderJumpsTimeline(el, { sidebar });
+      else renderJumpsVenue(el, { sidebar });
+    }
+    // 再描画で .jump-timeline-scroll が作り直されても位置を戻す
+    restoreJumpScrollPositions(savedScroll);
+  }
+
+  function initJumpLayoutControls() {
+    document.querySelectorAll("[data-jump-layout]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setJumpLayout(btn.getAttribute("data-jump-layout"));
+      });
+    });
+    syncJumpLayoutControls();
   }
 
   function selectRace(raceId, place, opts = {}) {
@@ -312,7 +578,8 @@
     if (place) state.place = place;
     renderTabs();
     renderMatrix();
-    renderJumps();
+    // 発走表ボタン欄は全再描画せず選択だけ更新（スクロール位置ジャンプ防止）
+    syncJumpSelection();
     renderDetail();
     renderShutuba();
     openAccordion("race");
@@ -340,9 +607,62 @@
     }
     return (
       `ホームズ推奨: <span class="holmes-recommend">` +
-      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="34" height="34" decoding="async" />` +
       `<strong>${escapeHtml(label)}</strong></span>`
     );
+  }
+
+  function formatPredictedAtLabel(raw) {
+    if (raw == null || raw === "") return "未更新";
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const d = new Date(raw * (raw < 1e12 ? 1000 : 1));
+      if (!Number.isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+    }
+    const s = String(raw).trim();
+    if (!s) return "未更新";
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2})(?::\d{2})?/);
+    if (m) return `${m[1]} ${m[2]}`;
+    const m2 = s.match(/^(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}:\d{2})/);
+    if (m2) return `${m2[1]} ${m2[2]}`;
+    return s;
+  }
+
+  /** 芝/ダート/障害 + 距離。例: ダート1000m（右）。（不明）はノイズなので付けない。 */
+  function formatCourseDistanceLabel(race) {
+    if (!race || typeof race !== "object") return "";
+    const stripNoiseDiv = (label) =>
+      String(label || "")
+        .replace(/[（(]\s*(不明|未知|なし|unknown|n\/a|na|none|\?|？)\s*[）)]/gi, "")
+        .trim();
+
+    const ready = stripNoiseDiv(race.course_label);
+    if (ready) return ready;
+
+    const rawCourse = String(race.course || race.surface || "").trim();
+    let surface = "";
+    if (/障害|^障/.test(rawCourse)) surface = "障害";
+    else if (/ダート|^ダ|dirt/i.test(rawCourse)) surface = "ダート";
+    else if (/芝|turf/i.test(rawCourse)) surface = "芝";
+
+    const distRaw = String(race.distance || "").trim() || rawCourse;
+    const dm = distRaw.match(/(\d{3,4})\s*m?/i);
+    const dist = dm ? dm[1] : "";
+
+    let div = String(race.course_division || "").trim().replace(/^[（(【\[]|[）)】\]]$/g, "");
+    if (/直線/.test(div)) div = "直線";
+    else if (/右/.test(div)) div = "右";
+    else if (/左/.test(div)) div = "左";
+    else div = ""; // 不明などは付けない
+
+    if (!surface && !dist) return "";
+    let label = surface && dist ? `${surface}${dist}m` : surface || `${dist}m`;
+    if ((div === "右" || div === "左" || div === "直線") && !label.includes(div)) {
+      label = `${label}（${div}）`;
+    }
+    return label;
   }
 
   function renderDetail() {
@@ -355,9 +675,20 @@
     const r = found.race;
     const marks = r.marks || {};
     const cells = r.cells || {};
+    const predictedAtLabel = formatPredictedAtLabel(r.predicted_at);
+    const courseLabel = formatCourseDistanceLabel(r);
+    const coursePart = courseLabel
+      ? ` ／ <span class="race-course">${escapeHtml(courseLabel)}</span>`
+      : "";
+    const paceLabel = String(r.pace_label || "").trim();
+    const paceLine = paceLabel
+      ? `<p class="meta race-pace">予想ペース: <strong>${escapeHtml(paceLabel)}</strong></p>`
+      : "";
     let html = `
       <h3>${escapeHtml(r.place)} ${escapeHtml(r.R)}R ${escapeHtml(r.name || "")}</h3>
-      <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      <p class="meta">発走 ${escapeHtml(r.start_time || "-")}${coursePart} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      ${paceLine}
+      <p class="meta race-predicted-at">予想更新時間: <strong>${escapeHtml(predictedAtLabel)}</strong></p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
       <p class="meta">${formatHolmesRecommendHtml(r)}</p>
@@ -465,7 +796,8 @@
     const m = s.match(
       /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
     );
-    const lines = [];
+    // 【最終更新日時】であることが一目で分かるよう見出し付きで表示
+    const lines = ["【最終更新日時】"];
     if (m) {
       lines.push(`📅${m[1]}`);
       if (m[2]) lines.push(`⏰${m[2]}`);
@@ -683,6 +1015,7 @@
   applyCastIconMode();
   initAccordion();
   initShutubaSortControls();
+  initJumpLayoutControls();
   loadSnapshot();
   const poll = Number(cfg.POLL_INTERVAL_MS) || 30000;
   if (poll > 0) {
