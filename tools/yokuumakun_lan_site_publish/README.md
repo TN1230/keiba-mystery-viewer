@@ -16,8 +16,9 @@ export YOKUMAKUN_SUDO_PASS='83670824'
 curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
 ```
 
-成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数あり・出馬表が推定3着内率順、を確認。
+成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数がレースごとに異なる・出馬表が推定3着内率順、を確認。
 
+`repair_and_publish.sh` は正式 publish（hwm ヘルパー）を先に試し、品質 OK なら standalone で上書きしない。
 一斉予想の再取得は、キャッシュ自体に `prediction` が無い場合のみ有効。公開品質の問題は publish 経路の修正で足りることが多い。
 
 ## サーバーで実行（恒久パッチ込み）

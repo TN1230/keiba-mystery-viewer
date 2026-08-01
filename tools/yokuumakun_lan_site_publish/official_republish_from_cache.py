@@ -1,443 +1,296 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""正式 publish 経路（day_rows=Edge行 + build_public_snapshot）で latest を再公開する。
+"""Republish latest.json using the SAME helpers as Edge (hwm._publish / _race_public_from_row).
 
-standalone は近似で、偏差/ホームズ/出馬表順/第3探偵が欠ける。
-本スクリプトは hwm / export_public_snapshot の本番ヘルパを優先する。
+Preferred path: hwm._publish_public_viewer_snapshot_from_races(races)
+Fallback: build Edge-like day_rows via _collect_day_edge_rows_from_races or
+_build_race_edge_row_for_rinfo, then build_public_snapshot(day_rows=...).
 """
-
 from __future__ import annotations
 
-import inspect
+import importlib.util
 import json
 import os
 import pickle
 import sys
-import traceback
-from datetime import datetime
+from datetime import date
 from pathlib import Path
-from typing import Any, Callable
-from zoneinfo import ZoneInfo
-
-_JST = ZoneInfo("Asia/Tokyo")
+from types import SimpleNamespace
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _root() -> Path:
-    env = (os.environ.get("YOKUMAKUN_ROOT") or "").strip()
-    if env:
-        return Path(env).resolve()
-    here = Path(__file__).resolve().parent
-    if (here / "hwm.py").is_file():
-        return here
-    return Path("/opt/yokuumakun_auto-x")
+    return Path(os.environ.get("YOKUUMAKUN_ROOT") or "/opt/yokuumakun_auto-x").expanduser().resolve()
 
 
-def _load_env(root: Path) -> None:
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv(root / ".env", override=False)
-        for rel in ("server_deployment/hwm_runtime.env", "server_deployment/.env"):
-            p = root / rel
-            if p.is_file():
-                load_dotenv(p, override=False)
-    except Exception:
-        pass
+def _load_mod(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, str(path))
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
-    notes: list[str] = []
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    day = datetime.now(_JST).strftime("%Y-%m-%d")
-    try:
-        from hwm_server_standalone import (  # type: ignore
-            _load_morning_bulk_races_cache,
-            effective_schedule_date_iso,
-        )
-
-        day = str(effective_schedule_date_iso())
-        races = _load_morning_bulk_races_cache(day) or {}
-        if races:
-            notes.append(f"helper_cache day={day} n={len(races)}")
-            return day, races, notes
-    except Exception as e:
-        notes.append(f"helper_cache err={type(e).__name__}:{e}")
-
-    ymd = day.replace("-", "")
-    for name in (f"morning_bulk_races_{ymd}.pkl", f"morning_bulk_races_{day}.pkl"):
-        fp = root / "logs" / name
-        if not fp.is_file():
-            continue
-        with fp.open("rb") as f:
-            data = pickle.load(f)
-        if isinstance(data, dict) and data:
-            notes.append(f"loaded {name} n={len(data)}")
-            return day, data, notes
-    return day, {}, notes
-
-
-def _upload(path: str, payload: Any) -> str | None:
-    try:
-        from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
-
-        url, err = upload_json_object(path, payload)
-        return err or url
-    except Exception as e:
-        return f"{type(e).__name__}:{e}"
-
-
-def _dump_helpers() -> dict[str, Any]:
-    out: dict[str, Any] = {"updated_at": datetime.now(_JST).isoformat(timespec="seconds")}
-    try:
-        from public_viewer import export_public_snapshot as mod  # type: ignore
-
-        out["export_file"] = getattr(mod, "__file__", None)
-        names = [
-            "build_public_snapshot",
-            "_race_public_from_row",
-            "_matrix_row_public",
-            "_morning_holmes_score_map",
-            "_holmes_public_fields",
-            "rank_edge_rows",
-            "matrix_table_records",
-            "_public_viewer_timing_fields",
-            "ranking_line",
-            "_logic_label_for_row",
-        ]
-        srcs: dict[str, str] = {}
-        for n in names:
-            fn = getattr(mod, n, None)
-            if callable(fn):
-                try:
-                    srcs[n] = inspect.getsource(fn)[:80000]
-                except Exception as e:
-                    srcs[n] = f"<err {type(e).__name__}:{e}>"
-        out["export_sources"] = srcs
-        out["export_callables"] = sorted(
-            n for n, v in vars(mod).items() if callable(v) and not n.startswith("__")
-        )
-    except Exception as e:
-        out["export_err"] = f"{type(e).__name__}:{e}"
-
-    try:
-        import hwm  # type: ignore
-
-        out["hwm_file"] = getattr(hwm, "__file__", None)
-        for n in (
-            "_publish_public_viewer_snapshot",
-            "_build_day_rows",
-            "build_day_rows",
-            "_edge_rows_for_day",
-            "_today_edge_rows",
-            "_refresh_day_rows",
-            "_rebuild_day_rows",
-        ):
-            fn = getattr(hwm, n, None)
-            if callable(fn):
-                try:
-                    out.setdefault("hwm_sources", {})[n] = inspect.getsource(fn)[:80000]
-                except Exception as e:
-                    out.setdefault("hwm_sources", {})[n] = f"<err {type(e).__name__}:{e}>"
-        # fuzzy list
-        out["hwm_publishish"] = sorted(
-            n
-            for n in dir(hwm)
-            if any(k in n.lower() for k in ("publish", "day_row", "edge", "snapshot", "holmes"))
-        )[:80]
-    except Exception as e:
-        out["hwm_err"] = f"{type(e).__name__}:{e}"
-    return out
-
-
-def _set_session_races(races: dict[str, Any]) -> None:
-    try:
-        import streamlit as st  # type: ignore
-
-        st.session_state["races"] = races
-    except Exception:
-        pass
-
-
-def _try_call_builders(races: dict[str, Any], day: str, notes: list[str]) -> list[Any]:
-    """本番コードから day_rows(Edge行) を得る。"""
-    candidates: list[tuple[str, Callable[..., Any]]] = []
-
-    try:
-        import hwm  # type: ignore
-
-        for name in dir(hwm):
-            low = name.lower()
-            if not any(k in low for k in ("day_row", "edge_row", "edge_rows", "ranking_row")):
-                continue
-            fn = getattr(hwm, name, None)
-            if callable(fn):
-                candidates.append((f"hwm.{name}", fn))
-        pub = getattr(hwm, "_publish_public_viewer_snapshot", None)
-        if callable(pub):
-            # publish 自体は後で試す
-            notes.append("hwm._publish_public_viewer_snapshot available")
-    except Exception as e:
-        notes.append(f"hwm_import err={type(e).__name__}:{e}")
-
-    try:
-        from public_viewer import export_public_snapshot as mod  # type: ignore
-
-        for name in dir(mod):
-            low = name.lower()
-            if "edge" in low or "day_row" in low:
-                fn = getattr(mod, name, None)
-                if callable(fn):
-                    candidates.append((f"export.{name}", fn))
-    except Exception as e:
-        notes.append(f"export_import err={type(e).__name__}:{e}")
-
-    # dedicated helpers often used by UI
-    for mod_name in ("race_day_ranking", "edge_ranking", "public_viewer.ranking", "ranking_core"):
+def _jsonable(obj: Any, *, _seen: Optional[set] = None, depth: int = 0) -> Any:
+    """Best-effort JSON conversion; drop cycles / non-serializable bits."""
+    if depth > 8:
+        return "<max_depth>"
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if _seen is None:
+        _seen = set()
+    oid = id(obj)
+    if oid in _seen:
+        return "<cycle>"
+    if isinstance(obj, dict):
+        _seen.add(oid)
         try:
-            mod = __import__(mod_name, fromlist=["*"])
-            for name in dir(mod):
-                if "row" in name.lower() or "edge" in name.lower() or "rank" in name.lower():
-                    fn = getattr(mod, name, None)
-                    if callable(fn) and not name.startswith("_"):
-                        candidates.append((f"{mod_name}.{name}", fn))
+            return {str(k): _jsonable(v, _seen=_seen, depth=depth + 1) for k, v in list(obj.items())[:80]}
+        finally:
+            _seen.discard(oid)
+    if isinstance(obj, (list, tuple)):
+        _seen.add(oid)
+        try:
+            return [_jsonable(v, _seen=_seen, depth=depth + 1) for v in list(obj)[:80]]
+        finally:
+            _seen.discard(oid)
+    if isinstance(obj, SimpleNamespace):
+        return _jsonable(vars(obj), _seen=_seen, depth=depth + 1)
+    try:
+        json.dumps(obj)
+        return obj
+    except Exception:
+        return repr(obj)[:240]
+
+
+def _pick_cache(root: Path) -> Tuple[Optional[Path], Optional[date]]:
+    logs = root / "logs"
+    cands = sorted(logs.glob("morning_bulk_races_*.pkl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    today = date.today()
+    for p in cands:
+        try:
+            stem = p.stem.replace("morning_bulk_races_", "")
+            d = date(int(stem[0:4]), int(stem[4:6]), int(stem[6:8]))
         except Exception:
-            pass
-
-    notes.append(f"builder_candidates={len(candidates)}")
-    for label, fn in candidates[:40]:
-        for kwargs in (
-            lambda: fn(races),
-            lambda: fn(races=races),
-            lambda: fn(races, day),
-            lambda: fn(races=races, schedule_date=day),
-            lambda: fn(),
-        ):
-            try:
-                rows = kwargs()
-            except TypeError:
-                continue
-            except Exception as e:
-                notes.append(f"{label} exc={type(e).__name__}:{e}"[:200])
-                break
-            if isinstance(rows, list) and rows and not isinstance(rows[0], dict):
-                # attribute-style rows
-                sample = rows[0]
-                if hasattr(sample, "race_id") or hasattr(sample, "place"):
-                    notes.append(f"got_rows via {label} n={len(rows)} type={type(sample).__name__}")
-                    return rows
-            if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "race_id" in rows[0]:
-                notes.append(f"got_dict_rows via {label} n={len(rows)} (may be insufficient)")
-    return []
-
-
-def _publish_with_day_rows(races: dict[str, Any], day: str, day_rows: list[Any]) -> dict[str, Any]:
-    from public_viewer.export_public_snapshot import (  # type: ignore
-        build_public_snapshot,
-        upload_json_object,
-    )
-
-    snap = build_public_snapshot(races=races, day_rows=day_rows, schedule_date=day)
-    if not isinstance(snap, dict):
-        return {"ok": False, "error": "bad_snap_type"}
-    snap["cleared"] = False
-    rc = int(snap.get("race_count") or 0)
-    # quality gates
-    venues = snap.get("venues") or []
-    n_races = sum(len(v.get("races") or []) for v in venues if isinstance(v, dict))
-    if rc <= 0 or n_races <= 0:
-        return {
-            "ok": False,
-            "error": "official_empty_races",
-            "race_count": rc,
-            "n_races_listed": n_races,
-        }
-    # holmes / dev checks
-    sample = None
-    for v in venues:
-        rs = v.get("races") or []
-        if rs:
-            sample = rs[0]
-            break
-    url, err = upload_json_object("snapshots/latest.json", snap)
-    return {
-        "ok": not err and rc > 0,
-        "error": err,
-        "url": url,
-        "via": "official_build_public_snapshot",
-        "schedule_date": day,
-        "race_count": rc,
-        "venue_count": snap.get("venue_count"),
-        "updated_at": snap.get("updated_at"),
-        "sample_dev": None if not sample else sample.get("dev"),
-        "sample_holmes": None if not sample else sample.get("holmes_index"),
-        "sample_marks": None if not sample else sample.get("marks"),
-    }
-
-
-def _publish_via_hwm() -> dict[str, Any]:
-    from hwm import _publish_public_viewer_snapshot  # type: ignore
-
-    _publish_public_viewer_snapshot(force=True)
-    # verify
-    import urllib.request
-
-    with urllib.request.urlopen(
-        "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/"
-        "public-viewer/snapshots/latest.json",
-        timeout=30,
-    ) as resp:
-        latest = json.loads(resp.read().decode("utf-8"))
-    rc = int((latest or {}).get("race_count") or 0)
-    return {
-        "ok": rc > 0,
-        "via": "hwm._publish_public_viewer_snapshot",
-        "race_count": rc,
-        "schedule_date": (latest or {}).get("schedule_date"),
-        "updated_at": (latest or {}).get("updated_at"),
-        "error": None if rc > 0 else "hwm_still_empty",
-    }
-
-
-def _quality_report(snap_url_check: bool = True) -> dict[str, Any]:
-    import urllib.request
-
-    with urllib.request.urlopen(
-        "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/"
-        "public-viewer/snapshots/latest.json",
-        timeout=30,
-    ) as resp:
-        d = json.loads(resp.read().decode("utf-8"))
-    missing_h = 0
-    long_dev = 0
-    umaban_sorted = 0
-    third_blank = 0
-    watson_blank = 0
-    n = 0
-    for v in d.get("venues") or []:
-        for r in v.get("races") or []:
-            n += 1
-            if not r.get("holmes_index"):
-                missing_h += 1
-            dev = r.get("dev")
-            if isinstance(dev, float) and abs(dev * 10 - round(dev * 10)) > 1e-9 and len(str(dev)) > 6:
-                long_dev += 1
-            elif isinstance(dev, str) and "." in dev and len(dev.split(".")[-1]) > 2:
-                long_dev += 1
-            rows = ((r.get("shutuba") or {}).get("rows")) or []
-            umas = [str(x.get("馬番")) for x in rows[:5]]
-            if umas == sorted(umas, key=lambda x: int(x) if x.isdigit() else 99):
-                # likely umaban order (weak)
-                umaban_sorted += 1
-            marks = r.get("marks") or {}
-            if marks.get("ワ") in (None, "", "-"):
-                watson_blank += 1
-            cells = r.get("cells") or {}
-            if (marks.get("ハ/ホプ") in (None, "", "-")) and (cells.get("ハ/ホプ") in (None, "", "-")):
-                third_blank += 1
-    return {
-        "race_count": d.get("race_count"),
-        "n_races": n,
-        "missing_holmes": missing_h,
-        "long_dev": long_dev,
-        "likely_umaban_order": umaban_sorted,
-        "watson_blank": watson_blank,
-        "third_blank": third_blank,
-        "updated_at": d.get("updated_at"),
-        "ok_quality": missing_h == 0 and long_dev == 0 and n > 0,
-    }
-
-
-def run() -> dict[str, Any]:
-    root = _root()
-    os.chdir(root)
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    _load_env(root)
-    os.environ.setdefault("HWM_SERVER_AUTO", "1")
-    os.environ.setdefault("HWM_SUBPROCESS_PREDICT", "1")
-
-    notes: list[str] = []
-    helpers = _dump_helpers()
-    notes.append(f"helpers_upload={_upload('ops/publish_helpers_dump.json', helpers)}")
-
-    day, races, load_notes = _load_races(root)
-    notes.extend(load_notes)
-    if not races:
-        return {"ok": False, "error": "empty_races_cache", "notes": notes}
-
-    _set_session_races(races)
-
-    attempts: list[dict[str, Any]] = []
-
-    # 1) official day_rows builders
-    day_rows = _try_call_builders(races, day, notes)
-    if day_rows:
+            continue
+        if d == today:
+            return p, d
+    if cands:
+        p = cands[0]
         try:
-            out = _publish_with_day_rows(races, day, day_rows)
-            attempts.append(out)
-            if out.get("ok"):
-                q = _quality_report()
-                out["quality"] = q
-                out["notes"] = notes
-                out["attempts"] = attempts
-                _upload("ops/official_republish_last.json", out)
-                return out
-        except Exception as e:
-            attempts.append({"ok": False, "error": f"official: {type(e).__name__}:{e}"})
-            notes.append(attempts[-1]["error"])
+            stem = p.stem.replace("morning_bulk_races_", "")
+            d = date(int(stem[0:4]), int(stem[4:6]), int(stem[6:8]))
+            return p, d
+        except Exception:
+            return p, today
+    return None, None
 
-    # 2) hwm publisher
-    try:
-        out = _publish_via_hwm()
-        attempts.append(out)
-        if out.get("ok"):
-            q = _quality_report()
-            out["quality"] = q
-            out["notes"] = notes
-            out["attempts"] = attempts
-            _upload("ops/official_republish_last.json", out)
-            if q.get("ok_quality"):
-                return out
-            notes.append("hwm_ok_but_quality_weak")
-    except Exception as e:
-        attempts.append({"ok": False, "error": f"hwm: {type(e).__name__}:{e}"})
-        notes.append(attempts[-1]["error"])
 
-    # 3) improved standalone
-    try:
-        from standalone_publish_from_cache import run as standalone_run
+def _load_races(path: Path) -> Dict[str, Any]:
+    with path.open("rb") as f:
+        obj = pickle.load(f)
+    if not isinstance(obj, dict):
+        raise RuntimeError(f"cache is not dict: {type(obj)}")
+    return obj
 
-        out = standalone_run()
-        attempts.append(out if isinstance(out, dict) else {"raw": str(out)})
-        if isinstance(out, dict) and out.get("ok"):
-            q = _quality_report()
-            out["quality"] = q
-            out["notes"] = notes + list(out.get("notes") or [])
-            out["attempts"] = attempts
-            out["via"] = "standalone_after_official_miss"
-            _upload("ops/official_republish_last.json", out)
-            return out
-    except Exception as e:
-        attempts.append({"ok": False, "error": f"standalone: {type(e).__name__}:{e}"})
-        notes.append(traceback.format_exc()[-500:])
 
-    out = {
-        "ok": False,
-        "error": "all_official_paths_failed",
-        "notes": notes,
-        "attempts": attempts,
-        "schedule_date": day,
-        "n_races_cache": len(races),
+def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
+    import re
+
+    races = []
+    for v in snap.get("venues") or []:
+        races.extend(v.get("races") or [])
+    if not races:
+        return {"ok": False, "reason": "no_races"}
+    bad_dev = 0
+    for r in races:
+        dev = r.get("dev")
+        s = str(dev) if dev is not None else ""
+        if "." in s and len(s.split(".")[-1]) > 1:
+            bad_dev += 1
+    holmes_vals = []
+    for r in races:
+        hi = str(r.get("holmes_index") or r.get("holmes") or "").strip()
+        m = re.match(r"([0-9]+(?:\.[0-9]+)?)", hi)
+        holmes_vals.append(m.group(1) if m else "")
+    blank_h = sum(1 for h in holmes_vals if not h)
+    identical_h = len(set(holmes_vals)) <= 1 and len(races) >= 3 and blank_h == 0
+    sample = races[0]
+    shutuba = sample.get("shutuba") or {}
+    rows = shutuba.get("rows") if isinstance(shutuba, dict) else shutuba
+    if not isinstance(rows, list):
+        rows = []
+    umas = [int(x.get("馬番") or 0) for x in rows[:8] if isinstance(x, dict)]
+    ordered_by_umaban = umas == sorted(umas) and len(umas) >= 4
+    marks = sample.get("marks") if isinstance(sample.get("marks"), dict) else {}
+    marks_ok = any(str(marks.get(k) or "").strip() not in ("", "-") for k in ("ワ", "アイ", "ハ/ホプ"))
+    cells = sample.get("cells") if isinstance(sample.get("cells"), dict) else {}
+    cells_ok = any(str(v or "").strip() not in ("", "-") for v in cells.values()) if cells else False
+    ok = (
+        bad_dev == 0
+        and blank_h == 0
+        and not identical_h
+        and not ordered_by_umaban
+        and marks_ok
+        and cells_ok
+        and len(races) >= 12
+    )
+    return {
+        "ok": ok,
+        "race_count": len(races),
+        "bad_dev": bad_dev,
+        "blank_holmes": blank_h,
+        "identical_holmes": identical_h,
+        "holmes_sample": holmes_vals[:8],
+        "ordered_by_umaban": ordered_by_umaban,
+        "marks_ok": marks_ok,
+        "cells_ok": cells_ok,
+        "sample_dev": sample.get("dev"),
+        "sample_holmes": sample.get("holmes_index") or sample.get("holmes"),
+        "sample_shutuba0": rows[0] if rows else None,
     }
-    _upload("ops/official_republish_last.json", out)
-    return out
 
 
 def main() -> int:
-    out = run()
-    print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
-    return 0 if out.get("ok") else 1
+    root = _root()
+    os.chdir(str(root))
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    out: Dict[str, Any] = {"ok": False, "root": str(root), "attempts": []}
+
+    cache_path, day = _pick_cache(root)
+    out["cache_path"] = str(cache_path) if cache_path else None
+    out["day"] = str(day) if day else None
+    if cache_path is None or day is None:
+        out["error"] = "no morning_bulk cache"
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 2
+
+    races = _load_races(cache_path)
+    out["n_races_cache"] = len(races)
+    if not races:
+        out["error"] = "empty cache"
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 3
+
+    # Prefer the exact Edge one-shot publisher when present.
+    try:
+        hwm = _load_mod("hwm_official_publish", root / "hwm.py")
+        if hasattr(hwm, "_publish_public_viewer_snapshot_from_races"):
+            res = hwm._publish_public_viewer_snapshot_from_races(races)  # type: ignore[attr-defined]
+            att = {"via": "_publish_public_viewer_snapshot_from_races", "result": _jsonable(res)}
+            out["attempts"].append(att)
+            if isinstance(res, dict) and res.get("ok"):
+                out.update(
+                    {
+                        "ok": True,
+                        "via": "_publish_public_viewer_snapshot_from_races",
+                        "url": res.get("url"),
+                        "race_count": res.get("race_count"),
+                        "venue_count": res.get("venue_count"),
+                        "updated_at": res.get("updated_at"),
+                        "schedule_date": res.get("schedule_date"),
+                    }
+                )
+                print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+                return 0
+    except Exception as e:
+        out["attempts"].append({"via": "_publish_public_viewer_snapshot_from_races", "error": repr(e)})
+
+    # Build day_rows then call export path.
+    try:
+        export_mod = _load_mod("export_public_snapshot", root / "public_viewer" / "export_public_snapshot.py")
+    except Exception as e:
+        out["error"] = f"load export failed: {e!r}"
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 4
+
+    day_rows: List[Any] = []
+    via = ""
+
+    try:
+        hwm = sys.modules.get("hwm_official_publish") or _load_mod("hwm_official_publish", root / "hwm.py")
+        if hasattr(hwm, "_collect_day_edge_rows_from_races"):
+            day_rows = list(hwm._collect_day_edge_rows_from_races(races) or [])  # type: ignore[attr-defined]
+            via = "_collect_day_edge_rows_from_races"
+            out["attempts"].append({"via": via, "n_rows": len(day_rows)})
+    except Exception as e:
+        out["attempts"].append({"via": "_collect_day_edge_rows_from_races", "error": repr(e)})
+
+    if not day_rows:
+        try:
+            hwm = sys.modules.get("hwm_official_publish") or _load_mod("hwm_official_publish", root / "hwm.py")
+            build_one = getattr(hwm, "_build_race_edge_row_for_rinfo", None)
+            if callable(build_one):
+                for rid, rinfo in races.items():
+                    if not isinstance(rinfo, dict):
+                        continue
+                    try:
+                        row = build_one(str(rid), rinfo)
+                    except Exception:
+                        row = None
+                    if row is not None:
+                        day_rows.append(row)
+                via = "_build_race_edge_row_for_rinfo"
+                out["attempts"].append({"via": via, "n_rows": len(day_rows)})
+        except Exception as e:
+            out["attempts"].append({"via": "_build_race_edge_row_for_rinfo", "error": repr(e)})
+
+    if not day_rows:
+        out["error"] = "could not build Edge-compatible day_rows"
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 5
+
+    # Sanity: first row should expose race_id / best_score like Edge.
+    sample = day_rows[0]
+    out["sample_row"] = {
+        "type": type(sample).__name__,
+        "race_id": getattr(sample, "race_id", None) or (sample.get("race_id") if isinstance(sample, dict) else None),
+        "best_score": getattr(sample, "best_score", None) if not isinstance(sample, dict) else sample.get("best_score"),
+        "has_rinfo": bool(getattr(sample, "rinfo", None) is not None) if not isinstance(sample, dict) else ("rinfo" in sample),
+    }
+
+    try:
+        snap = export_mod.build_public_snapshot(  # type: ignore[attr-defined]
+            schedule_date=day,
+            venues_override=None,
+            day_rows=day_rows,
+            races_by_id=races,
+            include_top5=True,
+            cleared=False,
+        )
+        q = _quality(snap if isinstance(snap, dict) else {})
+        out["quality"] = q
+        if not q.get("ok"):
+            out["error"] = "built snapshot failed quality checks"
+            out["attempts"].append({"via": f"build_public_snapshot:{via}", "quality": q})
+            # still try upload so operator can inspect; mark not-ok
+        up = export_mod.upload_public_snapshot(snap)  # type: ignore[attr-defined]
+        out["upload"] = _jsonable(up)
+        if isinstance(up, dict) and up.get("ok") and q.get("ok"):
+            out.update(
+                {
+                    "ok": True,
+                    "via": f"build_public_snapshot:{via}",
+                    "url": up.get("url"),
+                    "race_count": snap.get("race_count"),
+                    "venue_count": snap.get("venue_count"),
+                    "updated_at": snap.get("updated_at"),
+                    "schedule_date": snap.get("schedule_date"),
+                }
+            )
+            print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+            return 0
+        out["ok"] = bool(isinstance(up, dict) and up.get("ok") and q.get("ok"))
+        out["error"] = out.get("error") or (up.get("error") if isinstance(up, dict) else "upload failed")
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 1 if not out["ok"] else 0
+    except Exception as e:
+        out["error"] = repr(e)
+        print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+        return 6
 
 
 if __name__ == "__main__":

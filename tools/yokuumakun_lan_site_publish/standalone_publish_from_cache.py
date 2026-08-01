@@ -311,53 +311,79 @@ def _parse_pct_number(v: Any) -> float:
         return -1.0
 
 
-def _extract_holmes_score(rinfo: dict[str, Any]) -> float | None:
+def _as_holmes_score(v: Any) -> float | None:
+    """ホームズ指数として妥当な数値だけ通す。
+
+    Edge の best_score / gate の score=25 など別用途の値はここで弾く。
+    公開スナップの実測レンジは概ね 40〜100。
+    """
+    if v is None or v == "":
+        return None
+    try:
+        x = float(v)
+    except Exception:
+        return None
+    if x != x:  # NaN
+        return None
+    # 25 は gate 閾値等で全レースに混入しやすい誤値。ホームズ指数としては低すぎる。
+    if x < 40.0 or x > 100.0:
+        return None
+    return x
+
+
+def _extract_holmes_score(rinfo: dict[str, Any], rid: str | None = None) -> float | None:
+    """正式ヘルパー / morning フィールドからホームズ指数を取る。
+
+    禁止:
+    - holmes_gate_predict_snap の雑 walk
+    - Edge row / rinfo の generic best_score（別指標で 25 になりがち）
+    - gate の score / index / holmes
+    """
+    # 1) 正式: hwm の指数ヘルパー
+    if rid:
+        try:
+            from hwm import _holmes_index_score_and_rank_texts  # type: ignore
+
+            sc, _rank = _holmes_index_score_and_rank_texts(str(rid), rinfo)
+            got = _as_holmes_score(sc)
+            if got is not None:
+                return got
+        except Exception:
+            pass
+
+    # 2) rinfo 上の明示フィールド（best_score は使わない）
     for key in (
+        "morning_holmes_best_score",
         "holmes_index",
         "holmes_score",
-        "best_score",
         "morning_holmes_index",
-        "holmes",
     ):
-        v = rinfo.get(key)
-        if v is None or v == "":
-            continue
-        try:
-            return float(v)
-        except Exception:
-            continue
+        got = _as_holmes_score(rinfo.get(key))
+        if got is not None:
+            return got
 
-    snap = rinfo.get("holmes_gate_predict_snap")
-    found: list[float] = []
+    # 3) day snap
+    try:
+        from hwm import _load_day_holmes_score_snap  # type: ignore
 
-    def walk(obj: Any, depth: int = 0) -> None:
-        if depth > 6 or obj is None:
-            return
-        if isinstance(obj, (int, float)) and not isinstance(obj, bool):
-            x = float(obj)
-            if 0 < x <= 100:
-                found.append(x)
-            return
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                lk = str(k).lower()
-                if any(t in lk for t in ("holmes", "score", "index", "best")):
-                    try:
-                        x = float(v)
-                        if 0 < x <= 100:
-                            found.append(x)
-                            continue
-                    except Exception:
-                        pass
-                walk(v, depth + 1)
-        elif isinstance(obj, (list, tuple)) and depth < 3:
-            for it in obj[:20]:
-                walk(it, depth + 1)
+        snap = _load_day_holmes_score_snap() or {}
+        for bucket in ("morning_scores", "latest_scores", "scores"):
+            mp = snap.get(bucket) or {}
+            if rid and str(rid) in mp:
+                got = _as_holmes_score(mp[str(rid)])
+                if got is not None:
+                    return got
+    except Exception:
+        pass
 
-    walk(snap)
-    if found:
-        preferred = [x for x in found if x >= 30]
-        return max(preferred or found)
+    # 4) gate snap: 明示のホームズ指数キーのみ（score/index 禁止）
+    gate = rinfo.get("holmes_gate_predict_snap")
+    if isinstance(gate, dict):
+        for key in ("holmes_index", "morning_holmes_best_score", "holmes_score"):
+            if key in gate:
+                got = _as_holmes_score(gate[key])
+                if got is not None:
+                    return got
     return None
 
 
@@ -611,7 +637,7 @@ def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
     name = _safe_str(info.get("name") or rinfo.get("race_name") or rinfo.get("name"))
     start = _safe_str(info.get("start_time") or rinfo.get("start_time"))
 
-    score = _extract_holmes_score(rinfo)
+    score = _extract_holmes_score(rinfo, rid)
     if score is None:
         holmes = ""
     else:
@@ -720,31 +746,43 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
     try:
         from public_viewer.export_public_snapshot import _morning_holmes_score_map  # type: ignore
 
-        morning_map = _morning_holmes_score_map(races_cache) or {}
+        morning_map = dict(_morning_holmes_score_map(races_cache) or {})
     except Exception:
         morning_map = {}
+    try:
+        from hwm import _load_day_holmes_score_snap  # type: ignore
+
+        snap = _load_day_holmes_score_snap() or {}
+        for bucket in ("morning_scores", "latest_scores", "scores"):
+            for k, v in (snap.get(bucket) or {}).items():
+                ks = str(k)
+                if ks in morning_map:
+                    continue
+                try:
+                    morning_map[ks] = float(v)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
     public_races: list[dict[str, Any]] = []
     skipped = 0
     for rid in sorted(races_cache.keys(), key=str):
         rinfo = races_cache[rid]
         if isinstance(rinfo, dict) and rid in morning_map and rinfo.get("holmes_index") in (None, ""):
-            try:
+            got = _as_holmes_score(morning_map[rid])
+            if got is not None:
                 rinfo = dict(rinfo)
-                rinfo["holmes_index"] = float(morning_map[rid])
-            except Exception:
-                pass
+                rinfo["holmes_index"] = got
         pub = _race_to_public(str(rid), rinfo)
         if pub is None:
             skipped += 1
             continue
         if rid in morning_map and not pub.get("holmes_index"):
-            try:
-                sc = float(morning_map[rid])
-                pub["holmes_index"] = str(int(round(sc)))
+            got = _as_holmes_score(morning_map[rid])
+            if got is not None:
+                pub["holmes_index"] = str(int(round(got)))
                 pub["morning_holmes_index"] = pub["holmes_index"]
-            except Exception:
-                pass
         public_races.append(pub)
     _apply_holmes_ranks(public_races)
 
@@ -844,7 +882,7 @@ def run() -> dict[str, Any]:
         "has_df": isinstance(r0, dict) and r0.get("df") is not None,
         "has_prediction": isinstance(r0, dict) and r0.get("prediction") is not None,
         "holmes_gate_type": type(r0.get("holmes_gate_predict_snap")).__name__ if isinstance(r0, dict) else None,
-        "extracted_holmes": _extract_holmes_score(r0) if isinstance(r0, dict) else None,
+        "extracted_holmes": _extract_holmes_score(r0, rid0) if isinstance(r0, dict) else None,
         "dev_fmt": _fmt_dev(r0.get("dev")) if isinstance(r0, dict) else None,
     }
     notes.append(f"sample={json.dumps(sample, ensure_ascii=False, default=str)[:800]}")

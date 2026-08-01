@@ -32,6 +32,24 @@ class DayRowsTests(unittest.TestCase):
 
 
 class StandaloneBuildTests(unittest.TestCase):
+    def test_rejects_gate_threshold_score_25(self) -> None:
+        from standalone_publish_from_cache import _extract_holmes_score
+
+        # Edge/gate の score=25 はホームズ指数ではない
+        self.assertIsNone(
+            _extract_holmes_score(
+                {"best_score": 25, "holmes_gate_predict_snap": {"score": 25, "index": 25}},
+                "202601010301",
+            )
+        )
+        self.assertEqual(
+            _extract_holmes_score(
+                {"holmes_gate_predict_snap": {"score": 25, "holmes_index": 71}},
+                "202601010301",
+            ),
+            71.0,
+        )
+
     def test_build_snapshot_from_mock_cache(self) -> None:
         from standalone_publish_from_cache import (
             build_snapshot,
@@ -53,7 +71,8 @@ class StandaloneBuildTests(unittest.TestCase):
                 },
                 "dev": 57.365558433332595,
                 "rank": "C+",
-                "holmes_gate_predict_snap": {"holmes_index": 71},
+                "best_score": 25,  # must not become holmes_index
+                "holmes_gate_predict_snap": {"score": 25, "holmes_index": 71},
                 "hunter_mode": True,
                 "hunter_label": "ハンター",
                 "hunter_marks": {"◎": 4, "○": 12, "▲": 3, "△": [6, 9], "☆": 11},
