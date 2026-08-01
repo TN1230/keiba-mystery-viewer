@@ -21,12 +21,15 @@ sudo_run() {
   fi
 }
 
+# bust CDN/proxy caches so re-runs pick up installer fixes
+CACHE_BUST="$(date +%s)"
 fetch() {
   local f="$1"
-  if curl -fsSL -o "$f" "$BASE/$f"; then
+  if curl -fsSL -o "$f" "${BASE}/${f}?t=${CACHE_BUST}"; then
     return 0
   fi
-  curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_start/$f"
+  # jsDelivr branch tip can lag; prefer commit-ish raw above
+  curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_start/${f}"
 }
 
 persist_sudo_pass_to_env() {
@@ -80,7 +83,8 @@ PY="$ROOT/.venv/bin/python3"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
 
 echo "=== install systemd timers (05:00 + 05:15) ==="
-"$PY" "$DEST/install_race_day_start_timer.py" "$ROOT"
+# Run from TMP so installer src != server_deployment dst (avoids shutil.SameFileError)
+"$PY" "$TMP/install_race_day_start_timer.py" "$ROOT"
 
 echo "=== install cron backup ==="
 bash "$DEST/ensure_race_day_start_cron.sh"

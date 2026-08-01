@@ -55,11 +55,18 @@ def main(argv: list[str]) -> int:
         dst = unit_dir / name
         # bootstrap が先に server_deployment へ置いたあと、本スクリプトも
         # 同ディレクトリから実行されると src==dst になる
-        if src.resolve() != dst.resolve():
-            shutil.copy2(src, dst)
-            print(f"installed {dst}")
-        else:
+        try:
+            same = src.resolve() == dst.resolve()
+        except OSError:
+            same = False
+        if same:
             print(f"already in place {dst}")
+        else:
+            try:
+                shutil.copy2(src, dst)
+                print(f"installed {dst}")
+            except shutil.SameFileError:
+                print(f"already in place {dst}")
         if name.endswith(".sh"):
             try:
                 dst.chmod(dst.stat().st_mode | 0o111)

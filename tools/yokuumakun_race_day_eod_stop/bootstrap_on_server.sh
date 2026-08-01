@@ -23,12 +23,13 @@ sudo_run() {
   fi
 }
 
+CACHE_BUST="$(date +%s)"
 fetch() {
   local f="$1"
-  if curl -fsSL -o "$f" "$BASE/$f"; then
+  if curl -fsSL -o "$f" "${BASE}/${f}?t=${CACHE_BUST}"; then
     return 0
   fi
-  curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_eod_stop/$f"
+  curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_eod_stop/${f}"
 }
 
 persist_sudo_pass_to_env() {

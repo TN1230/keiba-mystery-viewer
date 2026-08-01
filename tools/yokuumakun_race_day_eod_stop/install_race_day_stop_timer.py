@@ -62,11 +62,18 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: missing {src}", file=sys.stderr)
             return 1
         dst = unit_dir / name
-        if src.resolve() != dst.resolve():
-            shutil.copy2(src, dst)
-            print(f"installed {dst}")
-        else:
+        try:
+            same = src.resolve() == dst.resolve()
+        except OSError:
+            same = False
+        if same:
             print(f"already in place {dst}")
+        else:
+            try:
+                shutil.copy2(src, dst)
+                print(f"installed {dst}")
+            except shutil.SameFileError:
+                print(f"already in place {dst}")
 
     # 実 unit は example をそのまま /etc へ（パスは auto-x 固定）
     svc_src = unit_dir / "yokuum-race-day-stop.service.example"
