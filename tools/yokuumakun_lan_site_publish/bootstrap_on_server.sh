@@ -38,6 +38,7 @@ ls -lt "$ROOT/logs"/morning_bulk_done_*.flag 2>/dev/null | head -10 || echo "(no
 cd "$TMP"
 for f in \
   force_publish_public_snapshot.py \
+  standalone_publish_from_cache.py \
   patch_worker_publish_on_success.py \
   install_publish_endpoint.py \
   install_remote_bootstrap_endpoint.py \
@@ -51,15 +52,33 @@ do
   fetch "$f" || echo "WARN: download failed $f"
 done
 
+# admin が壊れている場合は先に戻す（公開より前）
+if [[ -f "$ROOT/admin_panel_api.py" ]]; then
+  if ! "$ROOT/.venv/bin/python" -m py_compile "$ROOT/admin_panel_api.py" 2>/dev/null; then
+    echo "WARN: admin_panel_api.py broken — restoring backup before publish"
+    if [[ -f "$ROOT/admin_panel_api.py.bak_publish_endpoint" ]]; then
+      cp -f "$ROOT/admin_panel_api.py.bak_publish_endpoint" "$ROOT/admin_panel_api.py"
+    elif [[ -f "$ROOT/admin_panel_api.py.bak_remote_bootstrap" ]]; then
+      cp -f "$ROOT/admin_panel_api.py.bak_remote_bootstrap" "$ROOT/admin_panel_api.py"
+    fi
+  fi
+fi
+
 # --- 最優先: 今すぐ公開（パッチ前） ---
 cp -f force_publish_public_snapshot.py "$ROOT/" 2>/dev/null || true
+cp -f standalone_publish_from_cache.py "$ROOT/" 2>/dev/null || true
 echo "=== force publish NOW (before patches) ==="
 set +e
 cd "$ROOT"
 .venv/bin/python force_publish_public_snapshot.py
 PUB_RC=$?
-set -e
 echo "force_publish rc=$PUB_RC"
+if [[ "$PUB_RC" -ne 0 ]]; then
+  echo "=== standalone publish fallback ==="
+  .venv/bin/python standalone_publish_from_cache.py
+  echo "standalone rc=$?"
+fi
+set -e
 
 # --- 恒久パッチ ---
 echo "=== install lasting patches ==="
@@ -98,12 +117,18 @@ python3 "$TMP/install_daily_publish_watch.py" "$ROOT"
 echo "timer_install rc=$?"
 set +e
 
-# もう一度 publish（パッチ後の force_publish を使う）
+# もう一度 publish（パッチ後の force_publish / standalone を使う）
 echo "=== force publish AGAIN ==="
 cd "$ROOT"
+cp -f "$TMP/standalone_publish_from_cache.py" "$ROOT/" 2>/dev/null || true
 .venv/bin/python force_publish_public_snapshot.py
 PUB_RC2=$?
 echo "force_publish2 rc=$PUB_RC2"
+if [[ "$PUB_RC2" -ne 0 ]]; then
+  echo "=== standalone publish fallback 2 ==="
+  .venv/bin/python standalone_publish_from_cache.py
+  echo "standalone2 rc=$?"
+fi
 
 if systemctl list-unit-files yokuum-admin-panel.service 2>/dev/null | grep -q yokuum-admin-panel; then
   sudo_run systemctl restart yokuum-admin-panel.service || true

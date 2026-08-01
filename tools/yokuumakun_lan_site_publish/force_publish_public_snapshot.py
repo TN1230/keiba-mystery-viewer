@@ -407,6 +407,24 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
         errors.append(f"hwm: {type(e).__name__}: {e}")
         attempts.append({"ok": False, "error": errors[-1]})
 
+    # 4) 自前構築（会場殻問題の最終手段）
+    try:
+        from standalone_publish_from_cache import run as standalone_run
+
+        out = standalone_run()
+        attempts.append(dict(out) if isinstance(out, dict) else {"raw": str(out)})
+        if isinstance(out, dict) and out.get("ok") and int(out.get("race_count") or 0) > 0:
+            out["n_races_cache"] = len(races)
+            out["notes"] = notes + list(out.get("notes") or [])
+            out["attempts"] = attempts
+            out["export_errors"] = errors
+            notes.append(str(_upload_diag(out)))
+            return out
+        errors.append(str((out or {}).get("error") if isinstance(out, dict) else "standalone_failed"))
+    except Exception as e:
+        errors.append(f"standalone: {type(e).__name__}: {e}")
+        attempts.append({"ok": False, "error": errors[-1]})
+
     out = {
         "ok": False,
         "error": "all_publish_paths_failed",
