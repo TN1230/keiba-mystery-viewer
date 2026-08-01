@@ -630,10 +630,15 @@
     return s;
   }
 
-  /** 芝/ダート/障害 + 距離。例: ダート1000m（右） */
+  /** 芝/ダート/障害 + 距離。例: ダート1000m（右）。（不明）はノイズなので付けない。 */
   function formatCourseDistanceLabel(race) {
     if (!race || typeof race !== "object") return "";
-    const ready = String(race.course_label || "").trim();
+    const stripNoiseDiv = (label) =>
+      String(label || "")
+        .replace(/[（(]\s*(不明|未知|なし|unknown|n\/a|na|none|\?|？)\s*[）)]/gi, "")
+        .trim();
+
+    const ready = stripNoiseDiv(race.course_label);
     if (ready) return ready;
 
     const rawCourse = String(race.course || race.surface || "").trim();
@@ -650,10 +655,13 @@
     if (/直線/.test(div)) div = "直線";
     else if (/右/.test(div)) div = "右";
     else if (/左/.test(div)) div = "左";
+    else div = ""; // 不明などは付けない
 
     if (!surface && !dist) return "";
     let label = surface && dist ? `${surface}${dist}m` : surface || `${dist}m`;
-    if (div && !label.includes(div)) label = `${label}（${div}）`;
+    if ((div === "右" || div === "左" || div === "直線") && !label.includes(div)) {
+      label = `${label}（${div}）`;
+    }
     return label;
   }
 

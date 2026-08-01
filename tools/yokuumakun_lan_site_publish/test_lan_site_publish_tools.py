@@ -875,6 +875,15 @@ class CourseDistanceTests(unittest.TestCase):
             "芝1600m",
         )
 
+    def test_unknown_division_omitted(self) -> None:
+        from race_course_distance import format_course_label, normalize_course_division
+
+        self.assertEqual(normalize_course_division("不明"), "")
+        self.assertEqual(
+            format_course_label(course="芝", distance="1600", course_division="不明"),
+            "芝1600m",
+        )
+
     def test_enrich_snapshot(self) -> None:
         from race_course_distance import enrich_snapshot_with_course_distance
 

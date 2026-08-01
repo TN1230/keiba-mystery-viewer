@@ -54,16 +54,29 @@ def normalize_distance_m(raw: Any) -> str:
 
 
 def normalize_course_division(raw: Any) -> str:
-    """右 / 左 / 直線 など。余計な括弧は外す。"""
+    """右 / 左 / 直線 など。余計な括弧は外す。
+
+    「不明」など意味のない区分は空にして、要約のノイズにしない。
+    """
     s = _safe_str(raw)
     if not s:
         return ""
     s = s.strip("()（）[]【】 ")
+    low = s.lower()
+    if s in ("不明", "未知", "なし", "-", "—", "－", "?", "？") or low in (
+        "unknown",
+        "n/a",
+        "na",
+        "none",
+        "null",
+    ):
+        return ""
     # 「右回り」→「右」
     for token in ("直線", "右", "左"):
         if token in s:
             return token
-    return s[:8]
+    # 右/左/直線以外の短い区分は採用しない（不明系の表記揺れを落とす）
+    return ""
 
 
 def format_course_label(
@@ -91,7 +104,8 @@ def format_course_label(
         label = surface
     else:
         label = f"{dist}m"
-    if div and div not in label:
+    # 右/左/直線だけ括弧付きで付ける（不明は付けない）
+    if div in ("右", "左", "直線") and div not in label:
         label = f"{label}（{div}）"
     return label
 
