@@ -24,7 +24,7 @@ run_step() {
 }
 
 # [1] tunnel — embedded（同梱）を curl 経由でも取れるように GitHub から取得
-EMBED_URL_JS="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh"
+EMBED_URL_JS="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@987c8c3e95421203fa21fa03b19ebe0421ffdc1a/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh"
 # jsDelivr branch tip; also try commit if set
 if [[ -n "$TUNNEL_REF" ]]; then
   EMBED_URL_JS="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${TUNNEL_REF}/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh"
