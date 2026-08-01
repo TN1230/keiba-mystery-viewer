@@ -6,6 +6,8 @@
   - 全体を 2 時間以内で終える（ハードデッドライン）
   - 開催日以外はスキップ通知のみ
   - 破壊的操作（再予想・Selenium一斉）はしない。読み取り＋軽い到達確認のみ。
+  - 不具合検知時は安全な運用修復のみ自動実施し、対象チェックを再検査する
+    （YOKUMAKUN_EOD_TEST_AUTOFIX=0 / --no-autofix で無効化可）
 
 通知先（優先順）:
   テスト: DISCORD_WEBHOOK_TEST / ADMIN_TEST_WEBHOOK_URL / HWM_DISCORD_WEBHOOK_TEST /
@@ -49,6 +51,16 @@ PUBLIC_DAY = (
 EVENT_NAME = "race_day_evening_functional_test"
 DEFAULT_BUDGET_SEC = 2 * 60 * 60  # 2 hours
 
+# 過去データ・外部依存などで自動修正しない検査
+NON_AUTOFIXABLE_CHECKS = frozenset(
+    {
+        "morning_bulk_cache",
+        "daytime_publish_evidence",
+        "netkeiba_light",
+        "pdf_holmes_sample",
+    }
+)
+
 
 @dataclass
 class CheckResult:
@@ -57,6 +69,15 @@ class CheckResult:
     detail: str
     severity: str = "error"  # error | warn | info
     elapsed_ms: int = 0
+
+
+@dataclass
+class AutofixResult:
+    check_name: str
+    attempted: bool
+    ok: bool
+    detail: str
+    skipped_reason: str = ""
 
 
 @dataclass
@@ -72,6 +93,9 @@ class SuiteResult:
     checks: list[CheckResult] = field(default_factory=list)
     bugs: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    autofixes: list[AutofixResult] = field(default_factory=list)
+    autofix_recovered: bool = False
+    initial_bugs: list[str] = field(default_factory=list)
 
 
 def _root() -> Path:
@@ -240,6 +264,65 @@ def _run_cmd(cmd: list[str], *, timeout: float = 30.0) -> tuple[int, str]:
         return int(cp.returncode), out[-2000:]
     except Exception as e:
         return 1, f"{type(e).__name__}: {e}"
+
+
+def _sudo_cmd(cmd: list[str], *, timeout: float = 60.0) -> tuple[int, str]:
+    """Run command with sudo when needed. Uses YOKUMAKUN_SUDO_PASS if set."""
+    pw = (
+        os.environ.get("YOKUMAKUN_SUDO_PASS")
+        or os.environ.get("YOKUMAKUN_SSH_PASS")
+        or ""
+    ).strip()
+    try:
+        if pw:
+            full = ["sudo", "-S", "-p", ""] + cmd
+            cp = subprocess.run(
+                full,
+                input=pw + "\n",
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        else:
+            # already root / passwordless sudo
+            cp = subprocess.run(
+                ["sudo", "-n"] + cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if cp.returncode != 0 and "password" in ((cp.stderr or "") + (cp.stdout or "")).lower():
+                # last resort: try without sudo (may work for user units / already root)
+                cp2 = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+                out2 = ((cp2.stdout or "") + (cp2.stderr or "")).strip()
+                return int(cp2.returncode), out2[-2000:]
+        out = ((cp.stdout or "") + (cp.stderr or "")).strip()
+        return int(cp.returncode), out[-2000:]
+    except Exception as e:
+        return 1, f"{type(e).__name__}: {e}"
+
+
+def _autofix_enabled(argv_flag_no: bool = False) -> bool:
+    if argv_flag_no:
+        return False
+    v = (os.environ.get("YOKUMAKUN_EOD_TEST_AUTOFIX") or "1").strip().lower()
+    return v not in ("0", "false", "no", "off")
+
+
+def _find_first_script(root: Path, names: tuple[str, ...]) -> Path | None:
+    dirs = (
+        root,
+        root / "server_deployment",
+        root / "scripts",
+        root / "tools",
+        Path(__file__).resolve().parent,
+    )
+    for d in dirs:
+        for name in names:
+            p = d / name
+            if p.is_file():
+                return p
+    return None
 
 
 class Deadline:
@@ -595,6 +678,336 @@ def check_stop_finalize_logs(root: Path, day: str) -> tuple[bool, str, str]:
     return True, f"stop_logs={len(stop_t)} finalize_logs={len(fin_t)}", "info"
 
 
+def autofix_automation_stopped(root: Path, day: str) -> AutofixResult:
+    del root, day
+    rc, out = _sudo_cmd(
+        ["systemctl", "stop", "yokuum-server-automation-x.service"],
+        timeout=90,
+    )
+    ok = rc == 0
+    # inactive でも stop は成功扱い。確認
+    rc2, out2 = _run_cmd(["systemctl", "is-active", "yokuum-server-automation-x.service"])
+    state = (out2 or "").strip().splitlines()[-1] if out2 else ""
+    if state in ("inactive", "failed", "dead"):
+        ok = True
+    return AutofixResult(
+        "automation_stopped",
+        True,
+        ok,
+        f"systemctl stop rc={rc} state={state} out={(out or '')[-200:]}",
+    )
+
+
+def autofix_no_stuck_workers(root: Path, day: str) -> AutofixResult:
+    del root, day
+    # 予想ワーカーのみ対象（テスト自身や system サービスは触らない）
+    pattern = (
+        "pre_race_auto_predict_worker\\.py|"
+        "morning_bulk_server_worker\\.py|"
+        "graded_auto_predict_worker\\.py"
+    )
+    rc, out = _run_cmd(["bash", "-lc", f"pkill -f '{pattern}' || true"], timeout=30)
+    time.sleep(2.0)
+    rc2, out2 = _run_cmd(
+        [
+            "bash",
+            "-lc",
+            "pgrep -af 'pre_race_auto_predict_worker|morning_bulk_server_worker|graded_auto_predict_worker' || true",
+        ]
+    )
+    lines = [
+        ln
+        for ln in (out2 or "").splitlines()
+        if ln.strip() and "pgrep" not in ln and "python" in ln and "worker" in ln
+    ]
+    ok = len(lines) == 0
+    return AutofixResult(
+        "no_stuck_workers",
+        True,
+        ok,
+        f"pkill rc={rc} remaining={len(lines)} out={(out or '')[-120:]}",
+    )
+
+
+def autofix_admin_health(root: Path, day: str) -> AutofixResult:
+    del root, day
+    rc, out = _sudo_cmd(
+        ["systemctl", "restart", "yokuum-admin-panel.service"],
+        timeout=120,
+    )
+    time.sleep(3.0)
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8791/health", timeout=10) as resp:
+            body = json.loads(resp.read().decode())
+        healthy = bool(body.get("ok"))
+    except Exception as e:
+        healthy = False
+        body = {"error": f"{type(e).__name__}: {e}"}
+    return AutofixResult(
+        "admin_health",
+        True,
+        healthy,
+        f"restart rc={rc} healthy={healthy} out={(out or '')[-160:]} body={body}",
+    )
+
+
+def autofix_publish_patches(root: Path, day: str) -> AutofixResult:
+    del day
+    notes: list[str] = []
+    ok_any = False
+    for script_name in (
+        "patch_pre_race_publish_on_success.py",
+        "patch_worker_publish_on_success.py",
+    ):
+        script = root / script_name
+        if not script.is_file():
+            notes.append(f"{script_name}=missing")
+            continue
+        rc, out = _run_cmd([sys.executable, str(script), str(root)], timeout=90)
+        notes.append(f"{script_name} rc={rc}")
+        if rc == 0:
+            ok_any = True
+        elif out:
+            notes.append(out[-120:])
+    # re-evaluate patch presence
+    ok_chk, detail, _ = check_publish_patches(root)
+    return AutofixResult(
+        "publish_patches",
+        True,
+        ok_chk,
+        f"ok_any={ok_any} {detail}; " + "; ".join(notes),
+    )
+
+
+def autofix_publish_watch_timer(root: Path, day: str) -> AutofixResult:
+    del day
+    installer = root / "install_daily_publish_watch.py"
+    if installer.is_file():
+        rc, out = _run_cmd([sys.executable, str(installer), str(root)], timeout=180)
+        ok_chk, detail, _ = check_publish_watch_timer()
+        return AutofixResult(
+            "publish_watch_timer",
+            True,
+            ok_chk,
+            f"install rc={rc} {detail} out={(out or '')[-200:]}",
+        )
+    # fallback: enable existing unit
+    rc, out = _sudo_cmd(
+        ["systemctl", "enable", "--now", "yokuum-morning-publish-watch.timer"],
+        timeout=90,
+    )
+    ok_chk, detail, _ = check_publish_watch_timer()
+    return AutofixResult(
+        "publish_watch_timer",
+        True,
+        ok_chk or rc == 0,
+        f"enable --now rc={rc} {detail} out={(out or '')[-160:]}",
+    )
+
+
+def autofix_stop_finalize_logs(root: Path, day: str) -> AutofixResult:
+    """ログ欠落時: 既存の stop/finalize スクリプトがあれば実行を試みる。"""
+    notes: list[str] = []
+    stop = _find_first_script(
+        root,
+        (
+            "race_day_stop_hwm.sh",
+            "race_day_stop.sh",
+            "stop_race_day_hwm.sh",
+        ),
+    )
+    fin = _find_first_script(
+        root,
+        (
+            "race_day_finalize_hwm.sh",
+            "race_day_finalize.sh",
+            "eod_finalize_hwm.sh",
+            "finalize_race_day.sh",
+        ),
+    )
+    if not stop and not fin:
+        return AutofixResult(
+            "race_day_stop_finalize_logs",
+            False,
+            False,
+            "stop/finalize スクリプト未検出",
+            skipped_reason="no_stop_finalize_script",
+        )
+
+    env = os.environ.copy()
+    env["YOKUMAKUN_ROOT"] = str(root)
+    for label, script in (("stop", stop), ("finalize", fin)):
+        if script is None:
+            continue
+        try:
+            cp = subprocess.run(
+                ["bash", str(script)],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=600,
+                env=env,
+            )
+            notes.append(f"{label}:{script.name} rc={cp.returncode}")
+        except Exception as e:
+            notes.append(f"{label}:{script.name} {type(e).__name__}:{e}")
+
+    ok_chk, detail, _ = check_stop_finalize_logs(root, day)
+    return AutofixResult(
+        "race_day_stop_finalize_logs",
+        True,
+        ok_chk,
+        f"{detail}; " + "; ".join(notes),
+    )
+
+
+def autofix_eod_snapshot_state(root: Path, day: str) -> AutofixResult:
+    """latest 未クリア時: finalize スクリプトがあれば実行。"""
+    fin = _find_first_script(
+        root,
+        (
+            "race_day_finalize_hwm.sh",
+            "race_day_finalize.sh",
+            "eod_finalize_hwm.sh",
+            "finalize_race_day.sh",
+        ),
+    )
+    if fin is None:
+        # Python ヘルパーがあれば試す（破壊的な再公開はしない）
+        for mod_name, attr in (
+            ("hwm_server_standalone", "race_day_finalize"),
+            ("hwm", "race_day_finalize"),
+            ("public_viewer.export_public_snapshot", "clear_latest_snapshot"),
+        ):
+            try:
+                if str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
+                mod = __import__(mod_name, fromlist=[attr])
+                fn = getattr(mod, attr, None)
+                if callable(fn):
+                    fn()
+                    ok_chk, detail, _ = check_eod_snapshot(day)
+                    return AutofixResult(
+                        "eod_snapshot_state",
+                        True,
+                        ok_chk,
+                        f"called {mod_name}.{attr}; {detail}",
+                    )
+            except Exception:
+                continue
+        return AutofixResult(
+            "eod_snapshot_state",
+            False,
+            False,
+            "finalize 手段未検出（手動確認が必要）",
+            skipped_reason="no_finalize_means",
+        )
+
+    env = os.environ.copy()
+    env["YOKUMAKUN_ROOT"] = str(root)
+    try:
+        cp = subprocess.run(
+            ["bash", str(fin)],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env,
+        )
+        out = ((cp.stdout or "") + (cp.stderr or "")).strip()[-200:]
+        note = f"{fin.name} rc={cp.returncode} {out}"
+    except Exception as e:
+        note = f"{fin.name} {type(e).__name__}:{e}"
+    ok_chk, detail, _ = check_eod_snapshot(day)
+    return AutofixResult(
+        "eod_snapshot_state",
+        True,
+        ok_chk,
+        f"{detail}; {note}",
+    )
+
+
+_AUTOFIXERS: dict[str, Callable[[Path, str], AutofixResult]] = {
+    "automation_stopped": autofix_automation_stopped,
+    "no_stuck_workers": autofix_no_stuck_workers,
+    "admin_health": autofix_admin_health,
+    "publish_patches": autofix_publish_patches,
+    "publish_watch_timer": autofix_publish_watch_timer,
+    "race_day_stop_finalize_logs": autofix_stop_finalize_logs,
+    "eod_snapshot_state": autofix_eod_snapshot_state,
+}
+
+
+def attempt_autofixes(
+    root: Path,
+    day: str,
+    failed: list[CheckResult],
+    *,
+    deadline: Deadline,
+) -> list[AutofixResult]:
+    results: list[AutofixResult] = []
+    for cr in failed:
+        if deadline.remaining() < 45:
+            results.append(
+                AutofixResult(
+                    cr.name,
+                    False,
+                    False,
+                    "予算不足のため自己修正スキップ",
+                    skipped_reason="low_budget",
+                )
+            )
+            continue
+        if cr.name in NON_AUTOFIXABLE_CHECKS:
+            results.append(
+                AutofixResult(
+                    cr.name,
+                    False,
+                    False,
+                    "過去データ/外部依存のため自動修正対象外",
+                    skipped_reason="non_autofixable",
+                )
+            )
+            continue
+        fixer = _AUTOFIXERS.get(cr.name)
+        if fixer is None:
+            results.append(
+                AutofixResult(
+                    cr.name,
+                    False,
+                    False,
+                    "自己修正ハンドラなし",
+                    skipped_reason="no_handler",
+                )
+            )
+            continue
+        try:
+            results.append(fixer(root, day))
+        except Exception as e:
+            results.append(
+                AutofixResult(
+                    cr.name,
+                    True,
+                    False,
+                    f"{type(e).__name__}: {e}",
+                )
+            )
+    return results
+
+
+def _rebuild_bugs_warnings(suite: SuiteResult) -> None:
+    suite.bugs = []
+    suite.warnings = []
+    for cr in suite.checks:
+        if cr.ok:
+            continue
+        msg = f"{cr.name}: {cr.detail}"
+        if cr.severity == "warn":
+            suite.warnings.append(msg)
+        else:
+            suite.bugs.append(msg)
+
+
 def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     """returns title, description, color"""
     if suite.skipped:
@@ -602,14 +1015,18 @@ def build_report(suite: SuiteResult) -> tuple[str, str, int]:
         desc = f"日付: {suite.day}\n開催日ではないためスキップしました。"
         return title, desc, 0x95A5A6
 
-    bugs = suite.bugs
+    bugs = list(suite.bugs)
     warns = suite.warnings
     if suite.timed_out:
         bugs = bugs + ["2時間デッドライン超過（途中終了）"]
 
     if suite.overall_ok and not bugs:
-        title = "開催日夕テスト: 不具合無し"
-        status_line = "結果: **不具合無し**"
+        if suite.autofix_recovered:
+            title = "開催日夕テスト: 不具合無し（自己修正済）"
+            status_line = "結果: **不具合無し（自己修正済）**"
+        else:
+            title = "開催日夕テスト: 不具合無し"
+            status_line = "結果: **不具合無し**"
         color = 0x2ECC71
     else:
         title = "開催日夕テスト: 不具合あり"
@@ -628,6 +1045,21 @@ def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     for c in suite.checks:
         mark = "OK" if c.ok else ("WARN" if c.severity == "warn" else "NG")
         lines.append(f"- [{mark}] {c.name}: {c.detail} ({c.elapsed_ms}ms)")
+    if suite.autofixes:
+        lines.append("")
+        lines.append("【自己修正】")
+        for af in suite.autofixes:
+            if not af.attempted:
+                lines.append(
+                    f"- [SKIP] {af.check_name}: {af.detail}"
+                    + (f" ({af.skipped_reason})" if af.skipped_reason else "")
+                )
+            elif af.ok:
+                lines.append(f"- [FIXED] {af.check_name}: {af.detail}")
+            else:
+                lines.append(f"- [FAILED] {af.check_name}: {af.detail}")
+        if suite.initial_bugs and suite.autofix_recovered:
+            lines.append(f"- 初回不具合 {len(suite.initial_bugs)}件 → 再検査で解消")
     if bugs:
         lines.append("")
         lines.append("【不具合発生点】")
@@ -644,12 +1076,19 @@ def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     return title, "\n".join(lines)[:3900], color
 
 
-def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str, Any]:
+def run_suite(
+    *,
+    budget_sec: int | None = None,
+    force: bool = False,
+    autofix: bool | None = None,
+) -> dict[str, Any]:
     root = _root()
     os.chdir(root)
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
     _load_env(root)
+
+    do_autofix = _autofix_enabled(argv_flag_no=False) if autofix is None else bool(autofix)
 
     budget = int(
         budget_sec
@@ -705,6 +1144,7 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
         ("pdf_holmes_sample", lambda: check_pdf_holmes_sample(day)),
         ("netkeiba_light", check_netkeiba_light),
     ]
+    checks_by_name = {name: fn for name, fn in checks_plan}
 
     for name, fn in checks_plan:
         if deadline.expired():
@@ -725,6 +1165,45 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
                 suite.warnings.append(msg)
             else:
                 suite.bugs.append(msg)
+
+    suite.initial_bugs = list(suite.bugs)
+
+    # --- 自己修正 → 失敗チェック再検査 ---
+    failed = [c for c in suite.checks if not c.ok]
+    if do_autofix and failed and not deadline.expired() and deadline.remaining() >= 45:
+        suite.autofixes = attempt_autofixes(root, day, failed, deadline=deadline)
+        recheck_names = {
+            af.check_name
+            for af in suite.autofixes
+            if af.attempted
+        }
+        for name in recheck_names:
+            if deadline.expired():
+                suite.timed_out = True
+                break
+            fn = checks_by_name.get(name)
+            if fn is None:
+                continue
+            cr = _check(name, fn, deadline)
+            # replace prior result
+            for i, old in enumerate(suite.checks):
+                if old.name == name:
+                    suite.checks[i] = cr
+                    break
+        _rebuild_bugs_warnings(suite)
+        if suite.initial_bugs and not suite.bugs and not suite.timed_out:
+            suite.autofix_recovered = True
+    elif failed and not do_autofix:
+        suite.autofixes = [
+            AutofixResult(
+                c.name,
+                False,
+                False,
+                "自己修正無効（--no-autofix / YOKUMAKUN_EOD_TEST_AUTOFIX=0）",
+                skipped_reason="disabled",
+            )
+            for c in failed
+        ]
 
     suite.finished_at = datetime.now(_JST).isoformat(timespec="seconds")
     suite.overall_ok = (not suite.bugs) and (not suite.timed_out)
@@ -766,10 +1245,16 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
 
     # 二重に ops へも要約（TEST_ALWAYS 経由でテストチャンネルに乗る構成向け）
     try:
+        status_label = "不具合無し"
+        if not suite.overall_ok:
+            status_label = "不具合あり"
+        elif suite.autofix_recovered:
+            status_label = "不具合無し（自己修正済）"
         _notify_ops_fallback(
             "ok" if suite.overall_ok else "error",
-            ("不具合無し" if suite.overall_ok else "不具合あり")
-            + f" bugs={len(suite.bugs)} warns={len(suite.warnings)}",
+            status_label
+            + f" bugs={len(suite.bugs)} warns={len(suite.warnings)}"
+            + f" autofix={len(suite.autofixes)}",
         )
     except Exception:
         pass
@@ -789,6 +1274,9 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
                     "has_errors": has_errors,
                     "bugs": suite.bugs,
                     "warnings": suite.warnings,
+                    "initial_bugs": suite.initial_bugs,
+                    "autofix_recovered": suite.autofix_recovered,
+                    "autofixes": [af.__dict__ for af in suite.autofixes],
                     "checks": [c.__dict__ for c in suite.checks],
                     "webhook": wh,
                     "error_webhook": wh_err,
@@ -809,6 +1297,10 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
         "has_errors": has_errors,
         "bugs": suite.bugs,
         "warnings": suite.warnings,
+        "initial_bugs": suite.initial_bugs,
+        "autofix_enabled": do_autofix,
+        "autofix_recovered": suite.autofix_recovered,
+        "autofixes": [af.__dict__ for af in suite.autofixes],
         "checks": [c.__dict__ for c in suite.checks],
         "webhook": wh,
         "webhook_configured": bool(webhook),
@@ -822,11 +1314,13 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
 
 def main(argv: list[str]) -> int:
     force = "--force" in argv
+    no_autofix = "--no-autofix" in argv
     budget = None
     for a in argv[1:]:
         if a.startswith("--budget-sec="):
             budget = int(a.split("=", 1)[1])
-    result = run_suite(budget_sec=budget, force=force)
+    autofix = False if no_autofix else _autofix_enabled(argv_flag_no=False)
+    result = run_suite(budget_sec=budget, force=force, autofix=autofix)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     if result.get("skipped"):
         return 0

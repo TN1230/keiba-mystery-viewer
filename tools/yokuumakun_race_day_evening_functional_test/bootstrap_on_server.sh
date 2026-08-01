@@ -2,11 +2,11 @@
 # サーバー上で実行: 開催日 21:00 機能テストランナーを配置し crontab 登録する
 # 例:
 #   bash bootstrap_on_server.sh
-#   bash bootstrap_on_server.sh cursor/race-day-evening-functional-test-19c2
+#   bash bootstrap_on_server.sh cursor/race-day-evening-autofix-19c2
 set -euo pipefail
 
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/race-day-evening-functional-test-19c2}"
+BRANCH="${1:-cursor/race-day-evening-autofix-19c2}"
 BASE="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_race_day_evening_functional_test"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 TMP="$(mktemp -d)"
