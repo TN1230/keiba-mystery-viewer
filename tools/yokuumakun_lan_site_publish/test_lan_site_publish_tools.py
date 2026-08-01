@@ -144,6 +144,119 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 
+class KwargsFilterTests(unittest.TestCase):
+    def test_filter_drops_unknown_kwargs(self) -> None:
+        from official_republish_from_cache import (
+            _filter_kwargs_for_callable,
+            _make_kwargs_filter_wrapper,
+            _patch_build_race_edge_row_kwargs,
+        )
+        import sys
+        import types
+
+        def build_race_edge_row(*, marks_hunter=None, race_id=None):
+            return {"marks_hunter": marks_hunter, "race_id": race_id}
+
+        filtered = _filter_kwargs_for_callable(
+            build_race_edge_row,
+            {"marks_hunter": {"◎": 1}, "marks_baker": {"◎": 2}, "race_id": "x"},
+        )
+        self.assertEqual(set(filtered), {"marks_hunter", "race_id"})
+        self.assertNotIn("marks_baker", filtered)
+
+        wrapped = _make_kwargs_filter_wrapper(build_race_edge_row)
+        out = wrapped(marks_hunter={"◎": 3}, marks_baker={"◎": 9}, race_id="rid1")
+        self.assertEqual(out["marks_hunter"], {"◎": 3})
+        self.assertEqual(out["race_id"], "rid1")
+
+        mod = types.ModuleType("fake_edge_mod_for_kwargs_test")
+        mod.build_race_edge_row = build_race_edge_row  # type: ignore[attr-defined]
+        sys.modules[mod.__name__] = mod
+        try:
+            n = _patch_build_race_edge_row_kwargs()
+            self.assertGreaterEqual(n, 1)
+            fn = mod.build_race_edge_row
+            self.assertTrue(getattr(fn, "_kwargs_filtered", False))
+            # unknown marks_baker must not raise
+            row = fn(marks_hunter={"◎": 4}, marks_baker={"◎": 8}, race_id="rid2")
+            self.assertEqual(row["race_id"], "rid2")
+            # second patch is idempotent
+            n2 = _patch_build_race_edge_row_kwargs()
+            self.assertEqual(n2, 0)
+        finally:
+            sys.modules.pop(mod.__name__, None)
+
+    def test_patch_rewrites_helper_globals_binding(self) -> None:
+        """Collectors that did `from X import build_race_edge_row` keep a bare name in __globals__."""
+        from official_republish_from_cache import _patch_build_race_edge_row_kwargs
+        import sys
+        import types
+
+        # Build a fake edge module via exec so helper lookups use module globals
+        # (same as real `from edge import build_race_edge_row` inside a collector).
+        src = '''
+def build_race_edge_row(*, marks_hunter=None):
+    return {"ok": True, "hunter": marks_hunter}
+
+def _collect_day_edge_rows_from_races(races, **_kw):
+    out = []
+    for r in races:
+        row = build_race_edge_row(marks_hunter=r.get("hunter"), marks_baker="BAD")
+        out.append(row)
+    return out
+'''
+        edge = types.ModuleType("edge_mod_globals_for_kwargs_test")
+        g = edge.__dict__
+        exec(src, g)
+        sys.modules[edge.__name__] = edge
+        try:
+            with self.assertRaises(TypeError):
+                edge._collect_day_edge_rows_from_races([{"hunter": "◎1"}])
+
+            n = _patch_build_race_edge_row_kwargs()
+            self.assertGreaterEqual(n, 1)
+            rows = edge._collect_day_edge_rows_from_races([{"hunter": "◎1"}])
+            self.assertEqual(rows, [{"ok": True, "hunter": "◎1"}])
+            self.assertTrue(
+                getattr(
+                    edge._collect_day_edge_rows_from_races.__globals__["build_race_edge_row"],
+                    "_kwargs_filtered",
+                    False,
+                )
+            )
+        finally:
+            sys.modules.pop(edge.__name__, None)
+
+    def test_try_direct_build_filters_marks_baker(self) -> None:
+        from official_republish_from_cache import _try_direct_build_race_edge_rows
+        import types
+
+        edge = types.ModuleType("edge_mod_direct_for_kwargs_test")
+
+        def build_race_edge_row(*, marks_hunter=None, race_info=None, df=None):
+            return {
+                "ok": True,
+                "hunter": marks_hunter,
+                "r": (race_info or {}).get("R"),
+            }
+
+        edge.build_race_edge_row = build_race_edge_row  # type: ignore[attr-defined]
+        races = {
+            "rid1": {
+                "info": {"place": "札幌", "R": 1, "name": "テスト"},
+                "df": object(),
+                "hunter_marks": "◎1",
+                "baker_marks": "◎2",
+                "moriarty_marks": "◎3",
+            }
+        }
+        rows, err = _try_direct_build_race_edge_rows(edge, races)
+        self.assertIsNone(err)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["hunter"], "◎1")
+        self.assertEqual(rows[0]["r"], 1)
+
+
 class RemoteBootstrapInstallTests(unittest.TestCase):
     def test_install_compiles(self) -> None:
         from install_remote_bootstrap_endpoint import install

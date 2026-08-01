@@ -8,6 +8,7 @@ _build_race_edge_row_for_rinfo, then build_public_snapshot(day_rows=...).
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import os
 import pickle
@@ -15,7 +16,7 @@ import sys
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 def _root() -> Path:
@@ -93,6 +94,209 @@ def _load_races(path: Path) -> Dict[str, Any]:
     if not isinstance(obj, dict):
         raise RuntimeError(f"cache is not dict: {type(obj)}")
     return obj
+
+
+def _filter_kwargs_for_callable(fn: Callable[..., Any], kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop kwargs that the target callable does not accept (server API drift)."""
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return kwargs
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return kwargs
+    allowed = {
+        name
+        for name, p in sig.parameters.items()
+        if p.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+    }
+    return {k: v for k, v in kwargs.items() if k in allowed}
+
+
+def _make_kwargs_filter_wrapper(orig: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        return orig(*args, **_filter_kwargs_for_callable(orig, kwargs))
+
+    wrapped._kwargs_filtered = True  # type: ignore[attr-defined]
+    wrapped.__wrapped__ = orig  # type: ignore[attr-defined]
+    try:
+        wrapped.__name__ = getattr(orig, "__name__", "wrapped")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    return wrapped
+
+
+def _wrap_build_race_edge_row_attr(owner: Any, attr: str = "build_race_edge_row") -> bool:
+    """Wrap owner.attr if it is an unwrapped build_race_edge_row callable."""
+    try:
+        fn = getattr(owner, attr, None)
+    except Exception:
+        return False
+    if not callable(fn) or getattr(fn, "_kwargs_filtered", False):
+        return False
+    # Only wrap the real helper (or same-named imports); avoid unrelated attrs.
+    name = getattr(fn, "__name__", "") or ""
+    if name not in ("build_race_edge_row", "wrapped") and attr != "build_race_edge_row":
+        return False
+    if attr != "build_race_edge_row" and name != "build_race_edge_row":
+        return False
+    try:
+        if isinstance(owner, dict):
+            owner[attr] = _make_kwargs_filter_wrapper(fn)
+        else:
+            setattr(owner, attr, _make_kwargs_filter_wrapper(fn))
+        return True
+    except Exception:
+        return False
+
+
+def _patch_build_race_edge_row_kwargs() -> int:
+    """Wrap loaded build_race_edge_row callables so unknown kwargs are ignored.
+
+    Server drift example:
+      TypeError: build_race_edge_row() got an unexpected keyword argument 'marks_baker'
+
+    Also rewrites function __globals__ bindings (from X import build_race_edge_row),
+    which module-level setattr alone does not fix.
+    """
+    n = 0
+    seen_fn_ids: set[int] = set()
+
+    for mod in list(sys.modules.values()):
+        if mod is None:
+            continue
+        if _wrap_build_race_edge_row_attr(mod, "build_race_edge_row"):
+            n += 1
+        # Patch collector helpers' globals that imported the bare function.
+        for helper_name in (
+            "_collect_day_edge_rows_from_races",
+            "_build_race_edge_row_for_rinfo",
+            "collect_day_edge_rows_from_races",
+            "build_race_edge_row_for_rinfo",
+        ):
+            try:
+                helper = getattr(mod, helper_name, None)
+            except Exception:
+                helper = None
+            if not callable(helper):
+                continue
+            g = getattr(helper, "__globals__", None)
+            if not isinstance(g, dict):
+                continue
+            for gname in ("build_race_edge_row", "_build_race_edge_row"):
+                if gname not in g:
+                    continue
+                fn = g.get(gname)
+                if not callable(fn) or getattr(fn, "_kwargs_filtered", False):
+                    continue
+                fid = id(fn)
+                if fid in seen_fn_ids and getattr(g.get(gname), "_kwargs_filtered", False):
+                    continue
+                try:
+                    g[gname] = _make_kwargs_filter_wrapper(fn)
+                    seen_fn_ids.add(fid)
+                    n += 1
+                except Exception:
+                    continue
+            # Also wrap module-level _build_race_edge_row when present.
+            if _wrap_build_race_edge_row_attr(mod, "_build_race_edge_row"):
+                n += 1
+    return n
+
+
+def _try_direct_build_race_edge_rows(hwm: Any, races: Dict[str, Any]) -> Tuple[List[Any], Optional[str]]:
+    """Call hwm.build_race_edge_row per race with filtered kwargs built from rinfo."""
+    build = getattr(hwm, "build_race_edge_row", None)
+    if not callable(build):
+        return [], "no build_race_edge_row"
+    # unwrap our filter wrapper to inspect the real signature for positional mapping
+    target = getattr(build, "__wrapped__", build)
+    try:
+        sig = inspect.signature(target)
+        param_names = list(sig.parameters.keys())
+    except (TypeError, ValueError):
+        param_names = []
+
+    rows: List[Any] = []
+    first_err: Optional[str] = None
+    for rid, rinfo in races.items():
+        if not isinstance(rinfo, dict):
+            continue
+        info = rinfo.get("info") if isinstance(rinfo.get("info"), dict) else None
+        candidates: Dict[str, Any] = {
+            "race_id": str(rid),
+            "rid": str(rid),
+            "rinfo": rinfo,
+            "race": rinfo,
+            # Edge helpers often expect schedule info (place/R/name), not full cache entry.
+            "race_info": info if info is not None else rinfo,
+            "info": info if info is not None else rinfo.get("info"),
+            "marks_hunter": rinfo.get("hunter_marks") or rinfo.get("marks_hunter"),
+            "marks_moriarty": rinfo.get("moriarty_marks") or rinfo.get("marks_moriarty"),
+            "marks_baker": rinfo.get("baker_marks") or rinfo.get("marks_baker"),
+            "marks_watson": rinfo.get("watson_marks") or rinfo.get("marks_watson"),
+            "prediction": rinfo.get("prediction"),
+            "pred": rinfo.get("prediction"),
+            "df": rinfo.get("df"),
+            "dev": rinfo.get("dev"),
+            "grade": rinfo.get("grade"),
+            "rank": rinfo.get("rank"),
+            "hunter_mode": rinfo.get("hunter_mode"),
+            "hunter_label": rinfo.get("hunter_label"),
+        }
+        args: List[Any] = []
+        kwargs: Dict[str, Any] = {}
+        used: set[str] = set()
+        for name in param_names:
+            p = sig.parameters[name]
+            if p.kind == inspect.Parameter.VAR_POSITIONAL:
+                continue
+            if p.kind == inspect.Parameter.VAR_KEYWORD:
+                continue
+            val = candidates.get(name, inspect.Parameter.empty)
+            if val is inspect.Parameter.empty:
+                continue
+            if p.kind == inspect.Parameter.POSITIONAL_ONLY:
+                args.append(val)
+                used.add(name)
+            elif p.kind == inspect.Parameter.KEYWORD_ONLY:
+                kwargs[name] = val
+                used.add(name)
+            elif p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
+                # Prefer kwargs after first two positionals (race_id, rinfo)
+                if name in ("race_id", "rid", "rinfo", "race", "race_info") and len(args) < 2:
+                    args.append(val)
+                else:
+                    kwargs[name] = val
+                used.add(name)
+        if not args and not kwargs:
+            # blind common call shapes
+            try:
+                row = build(str(rid), rinfo)
+            except TypeError:
+                try:
+                    row = build(rinfo)
+                except Exception as e:
+                    if first_err is None:
+                        first_err = repr(e)
+                    continue
+            except Exception as e:
+                if first_err is None:
+                    first_err = repr(e)
+                continue
+        else:
+            try:
+                row = build(*args, **_filter_kwargs_for_callable(target, kwargs))
+            except Exception as e:
+                if first_err is None:
+                    first_err = repr(e)
+                continue
+        if row is not None:
+            rows.append(row)
+    return rows, first_err
 
 
 def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
@@ -210,33 +414,76 @@ def main() -> int:
     day_rows: List[Any] = []
     via = ""
 
+    # Ensure hwm (and its imports) are loaded, then wrap build_race_edge_row so
+    # collectors that pass marks_baker= do not TypeError on older signatures.
     try:
         hwm = sys.modules.get("hwm_official_publish") or _load_mod("hwm_official_publish", root / "hwm.py")
-        if hasattr(hwm, "_collect_day_edge_rows_from_races"):
+    except Exception as e:
+        out["attempts"].append({"via": "load_hwm_for_day_rows", "error": repr(e)})
+        hwm = None
+
+    patched_n = _patch_build_race_edge_row_kwargs()
+    out["attempts"].append({"via": "patch_build_race_edge_row_kwargs", "patched": patched_n})
+
+    if hwm is not None and hasattr(hwm, "_collect_day_edge_rows_from_races"):
+        try:
             day_rows = list(hwm._collect_day_edge_rows_from_races(races) or [])  # type: ignore[attr-defined]
             via = "_collect_day_edge_rows_from_races"
             out["attempts"].append({"via": via, "n_rows": len(day_rows)})
-    except Exception as e:
-        out["attempts"].append({"via": "_collect_day_edge_rows_from_races", "error": repr(e)})
+        except Exception as e:
+            out["attempts"].append({"via": "_collect_day_edge_rows_from_races", "error": repr(e)})
+            # Collect often imports edge helpers mid-call; wrap then retry once.
+            patched_after = _patch_build_race_edge_row_kwargs()
+            out["attempts"].append(
+                {"via": "patch_build_race_edge_row_kwargs_after_collect", "patched": patched_after}
+            )
+            try:
+                day_rows = list(hwm._collect_day_edge_rows_from_races(races) or [])  # type: ignore[attr-defined]
+                via = "_collect_day_edge_rows_from_races_retry"
+                out["attempts"].append({"via": via, "n_rows": len(day_rows)})
+            except Exception as e2:
+                out["attempts"].append(
+                    {"via": "_collect_day_edge_rows_from_races_retry", "error": repr(e2)}
+                )
 
-    if not day_rows:
+    if not day_rows and hwm is not None:
         try:
-            hwm = sys.modules.get("hwm_official_publish") or _load_mod("hwm_official_publish", root / "hwm.py")
             build_one = getattr(hwm, "_build_race_edge_row_for_rinfo", None)
             if callable(build_one):
+                first_err: Optional[str] = None
                 for rid, rinfo in races.items():
                     if not isinstance(rinfo, dict):
                         continue
                     try:
                         row = build_one(str(rid), rinfo)
-                    except Exception:
+                    except Exception as e:
+                        if first_err is None:
+                            first_err = repr(e)
                         row = None
                     if row is not None:
                         day_rows.append(row)
                 via = "_build_race_edge_row_for_rinfo"
-                out["attempts"].append({"via": via, "n_rows": len(day_rows)})
+                out["attempts"].append(
+                    {"via": via, "n_rows": len(day_rows), "first_error": first_err}
+                )
         except Exception as e:
             out["attempts"].append({"via": "_build_race_edge_row_for_rinfo", "error": repr(e)})
+
+    if not day_rows and hwm is not None:
+        # Re-patch in case for_rinfo loaded more modules
+        patched_n2 = _patch_build_race_edge_row_kwargs()
+        direct_rows, direct_err = _try_direct_build_race_edge_rows(hwm, races)
+        out["attempts"].append(
+            {
+                "via": "direct_build_race_edge_row",
+                "n_rows": len(direct_rows),
+                "first_error": direct_err,
+                "patched_extra": patched_n2,
+            }
+        )
+        if direct_rows:
+            day_rows = direct_rows
+            via = "direct_build_race_edge_row"
 
     if not day_rows:
         out["error"] = "could not build Edge-compatible day_rows"
