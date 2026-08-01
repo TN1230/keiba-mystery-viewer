@@ -62,8 +62,11 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: missing {src}", file=sys.stderr)
             return 1
         dst = unit_dir / name
-        shutil.copy2(src, dst)
-        print(f"installed {dst}")
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+            print(f"installed {dst}")
+        else:
+            print(f"already in place {dst}")
 
     # 実 unit は example をそのまま /etc へ（パスは auto-x 固定）
     svc_src = unit_dir / "yokuum-race-day-stop.service.example"

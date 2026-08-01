@@ -53,13 +53,18 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: missing {src}", file=sys.stderr)
             return 1
         dst = unit_dir / name
-        shutil.copy2(src, dst)
+        # bootstrap が先に server_deployment へ置いたあと、本スクリプトも
+        # 同ディレクトリから実行されると src==dst になる
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+            print(f"installed {dst}")
+        else:
+            print(f"already in place {dst}")
         if name.endswith(".sh"):
             try:
                 dst.chmod(dst.stat().st_mode | 0o111)
             except Exception:
                 pass
-        print(f"installed {dst}")
 
     # ensure original start script exists (server-owned)
     start = unit_dir / "race_day_start_hwm.sh"
