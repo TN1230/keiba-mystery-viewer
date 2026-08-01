@@ -14,6 +14,7 @@ from race_day_evening_functional_test import (
     NON_AUTOFIXABLE_CHECKS,
     SuiteResult,
     _autofix_enabled,
+    _chunk_text,
     _error_webhook_url,
     _is_race_day,
     _rebuild_bugs_warnings,

@@ -53,7 +53,13 @@
 
 **自己修正できなかった項目**（対象外・失敗・手段なし・残存 WARN/NG）には【対処法】を付け、**テスト webhook とエラー通知 webhook の両方**に同じ本文で送ります。
 
-加えて **【手動修正コマンド】コピペ用** embed（＋エラー webhook ではコマンド本文の追送）に、サーバーでそのまま貼れる `bash` をまとめます。EOD 系不具合時は 20:00 停止＋latest クリアの一括 bootstrap も先頭に入れます。
+加えて **【手動修正コマンド】コピペ用** を以後の 21:00 エラー報告に必ず載せます。
+
+- テスト webhook: 結果 embed ＋【手動修正コマンド】embed
+- **エラー webhook**: 結果 embed ＋【手動修正コマンド】embed ＋ **bash 本文の追送メッセージ**（コピペ用）
+- EOD 系不具合時は 20:00 停止＋latest クリアの一括 bootstrap を先頭に同梱
+
+`.env` に `DISCORD_WEBHOOK_FAILURE`（または `DISCORD_WEBHOOK_URL_3`）が無いとエラー webhook へ届きません。
 
 ## サーバーへの導入
 

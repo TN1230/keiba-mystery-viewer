@@ -1253,6 +1253,15 @@ def build_manual_fix_embed(suite: SuiteResult) -> dict[str, Any] | None:
     }
 
 
+def _chunk_text(text: str, size: int) -> list[str]:
+    """Discord content 上限向けにテキストを分割する。"""
+    text = (text or "").strip()
+    if not text:
+        return []
+    size = max(200, int(size))
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
 def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     """returns title, description, color"""
     if suite.skipped:
@@ -1492,7 +1501,8 @@ def run_suite(
         wh = {"ok": False, "error": "webhook_not_configured"}
 
     # 不具合エラーを含む報告はエラー通知 webhook にも送る
-    # （手動修正コマンド embed も同梱。長い場合は続けてコマンド本文も送る）
+    # 以後ずっと: エラー webhook には【手動修正コマンド】を必須同梱し、
+    # コピペしやすいよう bash 本文を追送する。
     wh_err: dict[str, Any] = {"ok": False, "skipped": True, "reason": "no_errors"}
     if has_errors:
         err_hook = _error_webhook_url()
@@ -1500,23 +1510,43 @@ def run_suite(
         if manual_cmds:
             err_content = (
                 "開催日夕の機能テスト: 不具合あり（エラー通知）\n"
-                "手動修正は embed「【手動修正コマンド】」をコピペしてください。"
+                "👇 手動修正は続くメッセージ／embed「【手動修正コマンド】」をコピペしてください。"
             )
         if err_hook and err_hook == webhook:
+            # レポート本体はテスト側で送信済み。コマンド追送だけは必ず行う。
             wh_err = {"ok": True, "skipped": True, "reason": "same_as_test_webhook"}
+            if manual_cmds:
+                for i, chunk in enumerate(_chunk_text(manual_cmds, 1700)):
+                    head = "【手動修正コマンド（コピペ用）】"
+                    if i:
+                        head += f" ({i + 1})"
+                    _post_discord_webhook(
+                        err_hook,
+                        content=f"{head}\n```bash\n{chunk}\n```"[:1900],
+                        embeds=None,
+                    )
         elif err_hook:
             wh_err = _post_discord_webhook(
                 err_hook,
                 content=err_content[:1900],
                 embeds=embeds,
             )
-            # embed が長い場合の保険: コマンド本文を別メッセージでも送る
-            if manual_cmds and wh_err.get("ok"):
-                cmd_msg = "【手動修正コマンド（コピペ用）】\n```bash\n" + manual_cmds[:1800] + "\n```"
-                _post_discord_webhook(err_hook, content=cmd_msg[:1900], embeds=None)
+            if manual_cmds:
+                for i, chunk in enumerate(_chunk_text(manual_cmds, 1700)):
+                    head = "【手動修正コマンド（コピペ用）】"
+                    if i:
+                        head += f" ({i + 1})"
+                    _post_discord_webhook(
+                        err_hook,
+                        content=f"{head}\n```bash\n{chunk}\n```"[:1900],
+                        embeds=None,
+                    )
         else:
             # 専用 URL が無い場合は ops の error 経路へ（failure チャンネル想定）
-            _notify_ops_fallback("error", desc.replace("\n", " | ")[:300])
+            detail = desc.replace("\n", " | ")[:220]
+            if manual_cmds:
+                detail += " | 手動修正コマンドあり（サーバーログ参照）"
+            _notify_ops_fallback("error", detail[:300])
             wh_err = {"ok": False, "error": "error_webhook_not_configured", "ops_fallback": True}
 
     # 二重に ops へも要約（TEST_ALWAYS 経由でテストチャンネルに乗る構成向け）
