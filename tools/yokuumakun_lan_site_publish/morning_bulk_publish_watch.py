@@ -188,13 +188,26 @@ def _fetch_public() -> dict[str, Any] | None:
 def _public_empty_or_wrong_day(snap: dict[str, Any] | None, day: str) -> bool:
     if snap is None:
         return True
+    sched = str(snap.get("schedule_date") or "")
+    # 当日の EOD クリア（cleared=true）は「埋めるべき空」ではない。
+    # ここを True にすると 20:00 以降に force publish で公開が復活する。
     if snap.get("cleared") is True:
-        return True
-    if str(snap.get("schedule_date") or "") != day:
+        return sched != day
+    if sched != day:
         return True
     if int(snap.get("race_count") or 0) <= 0:
         return True
     return False
+
+
+def _in_eod_no_publish_window(now: datetime | None = None) -> bool:
+    """開催日終了帯（JST 20:00 以降）は latest を埋め戻さない。"""
+    now = now or datetime.now(_JST)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=_JST)
+    else:
+        now = now.astimezone(_JST)
+    return int(now.hour) >= 20
 
 
 def _public_stale_vs_cache(
@@ -358,6 +371,18 @@ def _minutes_to_nearest_post(snap: dict[str, Any] | None) -> float | None:
 def decide_publish(root: Path, day: str, snap: dict[str, Any] | None) -> dict[str, Any]:
     """テスト用: publish 要否を判定する。"""
     out: dict[str, Any] = {"day": day, "action": "noop"}
+
+    # 20:00 JST 以降は EOD。クリア済みを埋め戻さない／新規 publish しない。
+    if _in_eod_no_publish_window():
+        out["reason"] = "eod_window_no_publish"
+        if snap and snap.get("cleared") is True and str(snap.get("schedule_date") or "") == day:
+            out["reason"] = "eod_cleared"
+        return out
+
+    if snap and snap.get("cleared") is True and str(snap.get("schedule_date") or "") == day:
+        out["reason"] = "day_already_cleared"
+        return out
+
     pending = _load_pending(root)
     if pending:
         out["action"] = "force_publish"

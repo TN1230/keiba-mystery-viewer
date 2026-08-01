@@ -1,0 +1,14 @@
+[Unit]
+Description=yokuumakun race-day morning start (automation)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tn
+WorkingDirectory=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_SERVER_AUTO_SERVICE=yokuum-server-automation-x.service
+Environment=TZ=Asia/Tokyo
+# .env の YOKUMAKUN_SUDO_PASS を start ラッパー側で読む
+ExecStart=/bin/bash /opt/yokuumakun_auto-x/server_deployment/race_day_start_wrapper.sh
+Nice=5

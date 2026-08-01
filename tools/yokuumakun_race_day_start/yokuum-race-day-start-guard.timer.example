@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer: race-day start miss-guard at 05:15 JST
+
+[Timer]
+OnCalendar=*-*-* 05:15:00 Asia/Tokyo
+AccuracySec=30s
+Persistent=true
+Unit=yokuum-race-day-start-guard.service
+
+[Install]
+WantedBy=timers.target

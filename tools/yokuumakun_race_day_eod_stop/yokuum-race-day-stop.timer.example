@@ -1,0 +1,12 @@
+[Unit]
+Description=Timer: race-day EOD stop at 20:00 JST every day
+
+[Timer]
+# 明示的に Asia/Tokyo で 20:00（OS ローカル TZ に依存しない）
+OnCalendar=*-*-* 20:00:00 Asia/Tokyo
+AccuracySec=30s
+Persistent=true
+Unit=yokuum-race-day-stop.service
+
+[Install]
+WantedBy=timers.target
