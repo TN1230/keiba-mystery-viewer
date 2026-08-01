@@ -1,6 +1,7 @@
 (() => {
   const cfg = window.PUBLIC_VIEWER_CONFIG || {};
   const SHUTUBA_SORT_KEY = "mystery_viewer_shutuba_sort";
+  const JUMP_LAYOUT_KEY = "mystery_viewer_jump_layout";
 
   function loadShutubaSort() {
     try {
@@ -12,11 +13,22 @@
     return "default";
   }
 
+  function loadJumpLayout() {
+    try {
+      const v = localStorage.getItem(JUMP_LAYOUT_KEY);
+      if (v === "timeline" || v === "venue") return v;
+    } catch (_) {
+      /* ignore */
+    }
+    return "venue";
+  }
+
   const state = {
     data: null,
     place: null,
     raceId: null,
     shutubaSort: loadShutubaSort(),
+    jumpLayout: loadJumpLayout(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -131,6 +143,59 @@
     }
   }
 
+  function allRaces() {
+    const out = [];
+    for (const v of venues()) {
+      for (const r of v.races || []) out.push(r);
+    }
+    return out;
+  }
+
+  function normalizeStartTime(st) {
+    const m = String(st || "").trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "";
+    return `${String(m[1]).padStart(2, "0")}:${m[2]}`;
+  }
+
+  function raceStartDate(race, scheduleDate) {
+    const hm = normalizeStartTime(race && race.start_time);
+    const day = String(scheduleDate || (state.data && state.data.schedule_date) || "").trim();
+    if (!hm || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const d = new Date(`${day}T${hm}:00+09:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  /** 最終更新時刻以降で、最も近い未発走レース */
+  function nearestPrepostRace(raceList) {
+    const list = Array.isArray(raceList) ? raceList : allRaces();
+    const updatedRaw = state.data && state.data.updated_at;
+    let ref = updatedRaw ? new Date(updatedRaw) : new Date();
+    if (Number.isNaN(ref.getTime())) ref = new Date();
+    // updated_at がタイムゾーン無しのとき JST として扱う
+    if (updatedRaw && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(String(updatedRaw))) {
+      const m = String(updatedRaw).match(
+        /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}(?::\d{2})?)/
+      );
+      if (m) {
+        const t = new Date(`${m[1]}T${m[2].length === 5 ? `${m[2]}:00` : m[2]}+09:00`);
+        if (!Number.isNaN(t.getTime())) ref = t;
+      }
+    }
+    const day = state.data && state.data.schedule_date;
+    let best = null;
+    let bestDiff = Infinity;
+    for (const r of list) {
+      const t = raceStartDate(r, day);
+      if (!t) continue;
+      const diff = t.getTime() - ref.getTime();
+      if (diff > 0 && diff < bestDiff) {
+        bestDiff = diff;
+        best = r;
+      }
+    }
+    return best;
+  }
+
   function fillVenueTabs(container) {
     if (!container) return;
     container.innerHTML = "";
@@ -142,10 +207,16 @@
     if (!state.place || !list.some((v) => v.place === state.place)) {
       state.place = list[0].place;
     }
+    const nearest = nearestPrepostRace();
+    const nearestPlace = nearest && nearest.place;
+    // 発走表モードでは会場タブはマトリクス用のため残す（ジャンプ本体は全場スコアボード）
+    container.hidden = false;
     for (const v of list) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "tab" + (v.place === state.place ? " active" : "");
+      let cls = "tab" + (v.place === state.place ? " active" : "");
+      if (nearestPlace && v.place === nearestPlace) cls += " is-nearest-prepost";
+      b.className = cls;
       b.textContent = v.place;
       b.setAttribute("aria-pressed", v.place === state.place ? "true" : "false");
       b.addEventListener("click", () => {
@@ -283,28 +354,178 @@
     return "jump";
   }
 
-  function renderJumps() {
-    const boxes = [$("jumpButtons"), $("jumpButtonsSidebar")].filter(Boolean);
-    const v = currentVenue();
-    for (const box of boxes) {
-      box.innerHTML = "";
-      if (!v) continue;
-      for (const r of v.races || []) {
-        const b = document.createElement("button");
-        b.type = "button";
-        const selected = String(r.race_id) === String(state.raceId);
-        b.className = jumpClass(r.holmes_index_rank) + (selected ? " is-selected" : "");
-        const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
-        b.textContent = `${rn}R`;
-        b.setAttribute("aria-pressed", selected ? "true" : "false");
-        const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
-          ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
-          : `${r.place} ${rn}R`;
-        b.title = tip;
-        b.addEventListener("click", () => selectRace(r.race_id, state.place, { scroll: false }));
-        box.appendChild(b);
-      }
+  function syncJumpLayoutControls() {
+    const mode = state.jumpLayout === "timeline" ? "timeline" : "venue";
+    document.querySelectorAll("[data-jump-layout]").forEach((btn) => {
+      const active = btn.getAttribute("data-jump-layout") === mode;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function setJumpLayout(mode) {
+    state.jumpLayout = mode === "timeline" ? "timeline" : "venue";
+    try {
+      localStorage.setItem(JUMP_LAYOUT_KEY, state.jumpLayout);
+    } catch (_) {
+      /* ignore */
     }
+    syncJumpLayoutControls();
+    renderJumps();
+  }
+
+  function makeJumpButton(r, { nearestId } = {}) {
+    const b = document.createElement("button");
+    b.type = "button";
+    const selected = String(r.race_id) === String(state.raceId);
+    const nearest = nearestId != null && String(r.race_id) === String(nearestId);
+    let cls = jumpClass(r.holmes_index_rank);
+    if (selected) cls += " is-selected";
+    if (nearest) cls += " is-nearest-prepost";
+    b.className = cls;
+    const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
+    b.textContent = `${rn}R`;
+    b.setAttribute("aria-pressed", selected ? "true" : "false");
+    const tip = r.holmes_rank_text && r.holmes_rank_text !== "算出前"
+      ? `${r.place} ${rn}R ${normalizeStartTime(r.start_time)}（${r.holmes_rank_text}）`
+      : `${r.place} ${rn}R ${normalizeStartTime(r.start_time)}`.trim();
+    b.title = tip;
+    b.addEventListener("click", () => selectRace(r.race_id, r.place, { scroll: false }));
+    return b;
+  }
+
+  function renderJumpsVenue(box, { sidebar }) {
+    box.className = sidebar ? "jump-row sidebar-jump-row" : "jump-row";
+    box.innerHTML = "";
+    const v = currentVenue();
+    if (!v) return;
+    const nearest = nearestPrepostRace(v.races || []);
+    const nearestId = nearest && nearest.race_id;
+    for (const r of v.races || []) {
+      box.appendChild(makeJumpButton(r, { nearestId }));
+    }
+  }
+
+  function renderJumpsTimeline(box, { sidebar }) {
+    box.className = sidebar ? "jump-timeline sidebar-jump-timeline" : "jump-timeline";
+    box.innerHTML = "";
+    const placeList = venues().map((v) => v.place).filter(Boolean);
+    const races = allRaces();
+    if (!placeList.length || !races.length) {
+      box.innerHTML = "<p class='hint'>発走表データがありません</p>";
+      return;
+    }
+    const times = [];
+    const seen = new Set();
+    for (const r of races) {
+      const t = normalizeStartTime(r.start_time);
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      times.push(t);
+    }
+    times.sort();
+    if (!times.length) {
+      box.innerHTML = "<p class='hint'>発走時刻がありません</p>";
+      return;
+    }
+
+    const byKey = new Map();
+    for (const r of races) {
+      const t = normalizeStartTime(r.start_time);
+      const place = r.place;
+      if (!t || !place) continue;
+      const key = `${t}||${place}`;
+      // 同一時刻・同一場は R 昇順の先頭を採用
+      const prev = byKey.get(key);
+      if (!prev) {
+        byKey.set(key, r);
+        continue;
+      }
+      const rn = Number.parseInt(String(r.R || "").replace(/[Rr]$/, ""), 10);
+      const pn = Number.parseInt(String(prev.R || "").replace(/[Rr]$/, ""), 10);
+      if (Number.isFinite(rn) && (!Number.isFinite(pn) || rn < pn)) byKey.set(key, r);
+    }
+
+    const nearest = nearestPrepostRace(races);
+    const nearestId = nearest && nearest.race_id;
+    const nearestTime = nearest ? normalizeStartTime(nearest.start_time) : "";
+
+    const scroll = document.createElement("div");
+    scroll.className = "jump-timeline-scroll";
+    const table = document.createElement("table");
+    table.className = "jump-scoreboard";
+    table.setAttribute("aria-label", "発走表順レースジャンプ");
+
+    const thead = document.createElement("thead");
+    const hr = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "jump-scoreboard-corner";
+    corner.textContent = "発走";
+    hr.appendChild(corner);
+    for (const place of placeList) {
+      const th = document.createElement("th");
+      th.className = "jump-scoreboard-place" + (place === state.place ? " is-active-place" : "");
+      th.textContent = place;
+      hr.appendChild(th);
+    }
+    thead.appendChild(hr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const t of times) {
+      const tr = document.createElement("tr");
+      if (nearestTime && t === nearestTime) tr.className = "is-nearest-row";
+      const th = document.createElement("th");
+      th.className = "jump-scoreboard-time";
+      th.scope = "row";
+      th.textContent = t;
+      tr.appendChild(th);
+      for (const place of placeList) {
+        const td = document.createElement("td");
+        const r = byKey.get(`${t}||${place}`);
+        if (!r) {
+          td.className = "jump-scoreboard-cell is-empty";
+          const dot = document.createElement("span");
+          dot.className = "jump-scoreboard-dot";
+          dot.setAttribute("aria-hidden", "true");
+          td.appendChild(dot);
+        } else {
+          td.className = "jump-scoreboard-cell";
+          const inner = document.createElement("div");
+          inner.className = "jump-scoreboard-cell-inner";
+          inner.appendChild(makeJumpButton(r, { nearestId }));
+          td.appendChild(inner);
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    scroll.appendChild(table);
+    box.appendChild(scroll);
+  }
+
+  function renderJumps() {
+    syncJumpLayoutControls();
+    const targets = [
+      { el: $("jumpButtons"), sidebar: false },
+      { el: $("jumpButtonsSidebar"), sidebar: true },
+    ];
+    const timeline = state.jumpLayout === "timeline";
+    for (const { el, sidebar } of targets) {
+      if (!el) continue;
+      if (timeline) renderJumpsTimeline(el, { sidebar });
+      else renderJumpsVenue(el, { sidebar });
+    }
+  }
+
+  function initJumpLayoutControls() {
+    document.querySelectorAll("[data-jump-layout]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        setJumpLayout(btn.getAttribute("data-jump-layout"));
+      });
+    });
+    syncJumpLayoutControls();
   }
 
   function selectRace(raceId, place, opts = {}) {
@@ -683,6 +904,7 @@
   applyCastIconMode();
   initAccordion();
   initShutubaSortControls();
+  initJumpLayoutControls();
   loadSnapshot();
   const poll = Number(cfg.POLL_INTERVAL_MS) || 30000;
   if (poll > 0) {
