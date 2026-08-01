@@ -7,9 +7,19 @@ set -euo pipefail
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
 BRANCH="${YOKUMAKUN_TUNNEL_BRANCH:-cursor/ssh-internet-tunnel-19c2}"
 BASE="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_ssh_internet_tunnel"
+SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+
+sudo_run() {
+  # 以前成功していた方式に合わせ、パスワード付きなら sudo -S
+  if [[ -n "$SUDO_PASS" ]]; then
+    echo "$SUDO_PASS" | sudo -S -p '' "$@"
+  else
+    sudo "$@"
+  fi
+}
 
 echo "INFO: bootstrap SSH internet tunnel branch=$BRANCH root=$ROOT"
 
@@ -18,8 +28,8 @@ if [[ ! -d "$ROOT" ]]; then
   exit 2
 fi
 
-if ! sudo -n true 2>/dev/null; then
-  echo "INFO: sudo password may be required for systemd install"
+if [[ -z "$SUDO_PASS" ]] && ! sudo -n true 2>/dev/null; then
+  echo "INFO: sudo password may be required (set YOKUMAKUN_SUDO_PASS to avoid prompt)"
 fi
 
 cd "$TMP"
@@ -37,7 +47,7 @@ install -m 0644 yokuum-ssh-tcp-tunnel.service.example "$ROOT/server_deployment/y
 # tn 所有にしてサービスユーザーが書けるように
 if id tn >/dev/null 2>&1; then
   chown -R tn:tn "$ROOT/server_deployment/ssh_tcp_tunnel.sh" "$ROOT/publish_ssh_endpoint.py" "$ROOT/logs" "$ROOT/.local" 2>/dev/null || \
-    sudo chown -R tn:tn "$ROOT/server_deployment/ssh_tcp_tunnel.sh" "$ROOT/publish_ssh_endpoint.py" "$ROOT/logs" "$ROOT/.local" || true
+    sudo_run chown -R tn:tn "$ROOT/server_deployment/ssh_tcp_tunnel.sh" "$ROOT/publish_ssh_endpoint.py" "$ROOT/logs" "$ROOT/.local" || true
 fi
 
 # sshd が localhost でも受けられること（通常は ListenAddress 未指定でOK）
@@ -50,15 +60,15 @@ echo "INFO: sshd is listening on port 22"
 
 UNIT_SRC="$ROOT/server_deployment/yokuum-ssh-tcp-tunnel.service.example"
 UNIT_DST="/etc/systemd/system/yokuum-ssh-tcp-tunnel.service"
-sudo cp "$UNIT_SRC" "$UNIT_DST"
-sudo systemctl daemon-reload
-sudo systemctl enable yokuum-ssh-tcp-tunnel.service
-sudo systemctl restart yokuum-ssh-tcp-tunnel.service
+sudo_run cp "$UNIT_SRC" "$UNIT_DST"
+sudo_run systemctl daemon-reload
+sudo_run systemctl enable yokuum-ssh-tcp-tunnel.service
+sudo_run systemctl restart yokuum-ssh-tcp-tunnel.service
 sleep 1
 if ! systemctl is-active --quiet yokuum-ssh-tcp-tunnel.service; then
   echo "ERROR: yokuum-ssh-tcp-tunnel.service failed to start" >&2
-  sudo systemctl --no-pager --full status yokuum-ssh-tcp-tunnel.service || true
-  sudo journalctl -u yokuum-ssh-tcp-tunnel.service -n 80 --no-pager || true
+  sudo_run systemctl --no-pager --full status yokuum-ssh-tcp-tunnel.service || true
+  sudo_run journalctl -u yokuum-ssh-tcp-tunnel.service -n 80 --no-pager || true
   exit 1
 fi
 echo "INFO: service active"
@@ -82,9 +92,9 @@ for i in $(seq 1 45); do
     fi
   fi
   # journal に ENDPOINT が出ていればローカル成功（supabase だけ失敗の可能性）
-  if sudo journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager 2>/dev/null | grep -q 'SSH_ENDPOINT_READY'; then
+  if sudo_run journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager 2>/dev/null | grep -q 'SSH_ENDPOINT_READY'; then
     echo "WARN: tunnel endpoint seen in journal but public ssh_endpoint.json not ready yet (publish may have failed)"
-    sudo journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager | grep -E 'SSH_ENDPOINT_READY|SSH_COMMAND|publish rc=' || true
+    sudo_run journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager | grep -E 'SSH_ENDPOINT_READY|SSH_COMMAND|publish rc=' || true
     if [[ -f "$ROOT/logs/ssh_endpoint.local.json" ]]; then
       echo "Paste this JSON to the cloud agent if Supabase publish keeps failing:"
       cat "$ROOT/logs/ssh_endpoint.local.json"
@@ -94,8 +104,8 @@ for i in $(seq 1 45); do
 done
 
 echo "WARN: service started but ssh_endpoint.json not updated yet; check logs:"
-sudo systemctl --no-pager --full status yokuum-ssh-tcp-tunnel.service || true
-sudo journalctl -u yokuum-ssh-tcp-tunnel.service -n 120 --no-pager || true
+sudo_run systemctl --no-pager --full status yokuum-ssh-tcp-tunnel.service || true
+sudo_run journalctl -u yokuum-ssh-tcp-tunnel.service -n 120 --no-pager || true
 tail -n 120 "$ROOT/logs/ssh_tcp_tunnel.log" || true
 if [[ -f "$ROOT/logs/ssh_endpoint.local.json" ]]; then
   echo "LOCAL endpoint file exists — paste to cloud agent:"

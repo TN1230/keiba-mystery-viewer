@@ -1,0 +1,25 @@
+# LAN 一括適用（未適用パッチ）
+
+クラウドVMからは自宅 `192.168.128.178` に SSH できません（AWS 内部IPに解決される）。  
+**以前成功していた方式**は Windows LAN からの `paramiko` + `echo pass | sudo -S` です。
+
+## 推奨（Windows / LAN）
+
+```powershell
+cd <このディレクトリを clone / ダウンロードした場所>
+powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
+```
+
+資格情報: `C:\Users\mocco\Desktop\ローカルサーバーIP.txt` の `pass:`（または `YOKUMAKUN_SSH_PASS`）。
+
+## サーバー上で直接
+
+```bash
+export YOKUMAKUN_SUDO_PASS='（sudo パスワード = SSH pass のことが多い）'
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_on_server.sh | bash | tee /tmp/lan_apply.log
+```
+
+## 適用後の確認（クラウド側）
+
+- `ssh_endpoint.json` に `host`/`port` がある
+- `snapshots/latest.json` の `schedule_date` が当日、`race_count` > 0

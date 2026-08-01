@@ -24,10 +24,23 @@ journalctl -u yokuum-ssh-tcp-tunnel -n 80 --no-pager
 cat /opt/yokuumakun_auto-x/logs/ssh_endpoint.local.json
 ```
 
-Windows (LAN):
+Windows (LAN) — **以前成功していた paramiko + sudo -S 方式（推奨）**:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
+```
+
+未適用パッチ（publish 修正・webhook フィルタ・SSH tunnel）をまとめて入れる場合:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\yokuumakun_lan_apply_pending\deploy_from_windows.ps1
+```
+
+サーバー上で `curl|bash` する場合は sudo 用に:
+
+```bash
+export YOKUMAKUN_SUDO_PASS='（SSH pass）'
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_ssh_internet_tunnel/bootstrap_on_server.sh | bash | tee /tmp/ssh_tunnel_bootstrap.log
 ```
 
 公開後の到達情報:
