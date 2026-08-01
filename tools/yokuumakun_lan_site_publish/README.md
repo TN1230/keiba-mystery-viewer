@@ -10,11 +10,15 @@
 3. **systemd timer**（05:30–11:00）で、完了済みなのに latest が空なら再 publish（保険）
 4. admin の `IndentationError` 時はバックアップから自動復旧
 
-## 今すぐレースをサイトへ反映（最短）
+## 今すぐレースをサイトへ反映 / 品質修復（最短）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
 curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
 ```
+
+成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数あり・出馬表が推定3着内率順、を確認。
+
+一斉予想の再取得は、キャッシュ自体に `prediction` が無い場合のみ有効。公開品質の問題は publish 経路の修正で足りることが多い。
 
 ## サーバーで実行（恒久パッチ込み）
 ```bash

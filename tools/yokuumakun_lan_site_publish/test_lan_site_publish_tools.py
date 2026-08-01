@@ -33,9 +33,14 @@ class DayRowsTests(unittest.TestCase):
 
 class StandaloneBuildTests(unittest.TestCase):
     def test_build_snapshot_from_mock_cache(self) -> None:
-        from standalone_publish_from_cache import build_snapshot, _format_mark_map
+        from standalone_publish_from_cache import (
+            build_snapshot,
+            _format_mark_map,
+            _fmt_dev,
+        )
 
         self.assertEqual(_format_mark_map({"◎": 4, "○": 12, "▲": 3, "△": [6, 9], "☆": 11}), "◎4○12▲3△6,9☆11")
+        self.assertEqual(_fmt_dev(57.365558433332595), 57.4)
         races = {
             "202601010301": {
                 "info": {
@@ -46,9 +51,11 @@ class StandaloneBuildTests(unittest.TestCase):
                     "weather": "晴",
                     "baba": "良",
                 },
-                "dev": 40.0,
+                "dev": 57.365558433332595,
                 "rank": "C+",
-                "holmes_index": 71,
+                "holmes_gate_predict_snap": {"holmes_index": 71},
+                "hunter_mode": True,
+                "hunter_label": "ハンター",
                 "hunter_marks": {"◎": 4, "○": 12, "▲": 3, "△": [6, 9], "☆": 11},
                 "watson_marks": {"◎": 4, "○": 12},
                 "prediction": [
@@ -109,7 +116,12 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertEqual(snap["venue_count"], 1)
         self.assertEqual(snap["venues"][0]["place"], "札幌")
         race = snap["venues"][0]["races"][0]
+        self.assertEqual(race["dev"], 57.4)
+        self.assertEqual(race["holmes_index"], "71")
+        self.assertEqual(race["cells"]["ハ/ホプ"], "ハンター")
         self.assertTrue(race["shutuba"]["rows"])
+        # default order = higher 推定3着内率 first (馬番4)
+        self.assertEqual(race["shutuba"]["rows"][0]["馬番"], "4")
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 

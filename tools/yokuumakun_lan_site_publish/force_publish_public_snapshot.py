@@ -407,7 +407,27 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
         errors.append(f"hwm: {type(e).__name__}: {e}")
         attempts.append({"ok": False, "error": errors[-1]})
 
-    # 4) 自前構築（会場殻問題の最終手段）
+    # 4) 正式ヘルパ再公開（Edge day_rows / morning holmes map）
+    try:
+        from official_republish_from_cache import run as official_run
+
+        out = official_run()
+        attempts.append(dict(out) if isinstance(out, dict) else {"raw": str(out)})
+        if isinstance(out, dict) and out.get("ok") and int(out.get("race_count") or 0) > 0:
+            q = out.get("quality") or {}
+            out["n_races_cache"] = len(races)
+            out["notes"] = notes + list(out.get("notes") or [])
+            out["attempts"] = attempts
+            out["export_errors"] = errors
+            notes.append(str(_upload_diag(out)))
+            if q.get("ok_quality") or int(out.get("race_count") or 0) > 0:
+                return out
+        errors.append(str((out or {}).get("error") if isinstance(out, dict) else "official_failed"))
+    except Exception as e:
+        errors.append(f"official: {type(e).__name__}: {e}")
+        attempts.append({"ok": False, "error": errors[-1]})
+
+    # 5) 自前構築（会場殻問題の最終手段・品質補正込み）
     try:
         from standalone_publish_from_cache import run as standalone_run
 

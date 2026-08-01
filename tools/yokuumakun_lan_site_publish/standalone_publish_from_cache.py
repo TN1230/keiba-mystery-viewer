@@ -202,38 +202,80 @@ def _get_logic_marks(rinfo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _mark_nonempty(m: Any) -> bool:
+    return isinstance(m, dict) and any(v not in (None, "", [], ()) for v in m.values())
+
+
+def _try_pc_marks(pred: Any, names: tuple[str, ...]) -> Any:
+    try:
+        import prediction_core as pc  # type: ignore
+    except Exception:
+        pc = None
+    if pc is not None:
+        for fn in names:
+            if hasattr(pc, fn):
+                try:
+                    val = getattr(pc, fn)(pred)
+                    if _mark_nonempty(val):
+                        return val
+                except Exception:
+                    continue
+    try:
+        from public_viewer import export_public_snapshot as ex  # type: ignore
+
+        for fn in names:
+            if hasattr(ex, fn):
+                try:
+                    val = getattr(ex, fn)(pred)
+                    if _mark_nonempty(val):
+                        return val
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return None
+
+
 def _enrich_marks_from_prediction(rinfo: dict[str, Any], logic_marks: dict[str, Any]) -> dict[str, Any]:
+    """キャッシュに印が無くても prediction から全ロジック分を必ず生成する。"""
     pred = rinfo.get("prediction")
     if pred is None:
         return logic_marks
-    if not any(isinstance(v, dict) and v for v in logic_marks.values()):
-        try:
-            from prediction_core import get_marks_watson  # type: ignore
 
-            logic_marks["watson"] = get_marks_watson(pred) or logic_marks.get("watson")
-        except Exception:
-            pass
+    if not _mark_nonempty(logic_marks.get("watson")):
+        logic_marks["watson"] = _try_pc_marks(
+            pred, ("get_marks_watson", "marks_watson", "watson_marks")
+        ) or logic_marks.get("watson")
+    if not _mark_nonempty(logic_marks.get("irene")):
+        val = None
         try:
             from public_viewer.export_public_snapshot import _irene_marks_for_public  # type: ignore
 
-            logic_marks["irene"] = _irene_marks_for_public(pred) or logic_marks.get("irene")
+            val = _irene_marks_for_public(pred)
         except Exception:
-            pass
-        for name, fn_names in (
-            ("hunter", ("get_marks_hunter", "get_hunter_marks")),
-            ("moriarty", ("get_marks_moriarty", "get_moriarty_marks")),
-        ):
-            if isinstance(logic_marks.get(name), dict) and logic_marks.get(name):
-                continue
-            try:
-                import prediction_core as pc  # type: ignore
-
-                for fn in fn_names:
-                    if hasattr(pc, fn):
-                        logic_marks[name] = getattr(pc, fn)(pred) or logic_marks.get(name)
-                        break
-            except Exception:
-                pass
+            val = _try_pc_marks(
+                pred, ("get_marks_irene", "get_irene_marks", "irene_marks", "get_marks_holmes")
+            )
+        if _mark_nonempty(val):
+            logic_marks["irene"] = val
+    if not _mark_nonempty(logic_marks.get("hunter")):
+        logic_marks["hunter"] = _try_pc_marks(
+            pred, ("get_marks_hunter", "get_hunter_marks", "hunter_marks")
+        ) or logic_marks.get("hunter")
+    if not _mark_nonempty(logic_marks.get("moriarty")):
+        logic_marks["moriarty"] = _try_pc_marks(
+            pred, ("get_marks_moriarty", "get_moriarty_marks", "moriarty_marks")
+        ) or logic_marks.get("moriarty")
+    if not _mark_nonempty(logic_marks.get("hope")):
+        logic_marks["hope"] = _try_pc_marks(
+            pred, ("get_marks_hope", "get_hope_marks", "hope_marks")
+        ) or logic_marks.get("hope")
+    if not _mark_nonempty(logic_marks.get("baker")):
+        logic_marks["baker"] = (
+            rinfo.get("baker_marks")
+            or rinfo.get("marks_baker")
+            or _try_pc_marks(pred, ("get_marks_baker", "get_baker_marks", "baker_marks"))
+        )
     return logic_marks
 
 
@@ -243,21 +285,80 @@ def _public_marks(logic_marks: dict[str, Any]) -> dict[str, str]:
         "アイ": _format_mark_map(logic_marks.get("irene")),
         "モ": _format_mark_map(logic_marks.get("moriarty")),
         "ハ/ホプ": _format_mark_map(logic_marks.get("hunter") or logic_marks.get("hope")),
-        "ベ": "-",
+        "ベ": _format_mark_map(logic_marks.get("baker")),
     }
 
 
-def _pct(v: Any) -> str:
+def _fmt_dev(v: Any) -> float | None:
     if v is None or v == "":
-        return ""
+        return None
     try:
-        x = float(v)
-        if x <= 1.0:
-            x *= 100.0
-        return f"{x:.3f}%".rstrip("0").rstrip(".") + ("%" if "%" not in f"{x:.3f}" else "")
+        return round(float(v), 1)
     except Exception:
-        s = str(v)
-        return s if s.endswith("%") else s
+        return None
+
+
+def _parse_pct_number(v: Any) -> float:
+    if v is None or v == "":
+        return -1.0
+    if isinstance(v, (int, float)):
+        x = float(v)
+        return x * 100.0 if x <= 1.0 else x
+    s = str(v).strip().replace("%", "")
+    try:
+        return float(s)
+    except Exception:
+        return -1.0
+
+
+def _extract_holmes_score(rinfo: dict[str, Any]) -> float | None:
+    for key in (
+        "holmes_index",
+        "holmes_score",
+        "best_score",
+        "morning_holmes_index",
+        "holmes",
+    ):
+        v = rinfo.get(key)
+        if v is None or v == "":
+            continue
+        try:
+            return float(v)
+        except Exception:
+            continue
+
+    snap = rinfo.get("holmes_gate_predict_snap")
+    found: list[float] = []
+
+    def walk(obj: Any, depth: int = 0) -> None:
+        if depth > 6 or obj is None:
+            return
+        if isinstance(obj, (int, float)) and not isinstance(obj, bool):
+            x = float(obj)
+            if 0 < x <= 100:
+                found.append(x)
+            return
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                lk = str(k).lower()
+                if any(t in lk for t in ("holmes", "score", "index", "best")):
+                    try:
+                        x = float(v)
+                        if 0 < x <= 100:
+                            found.append(x)
+                            continue
+                    except Exception:
+                        pass
+                walk(v, depth + 1)
+        elif isinstance(obj, (list, tuple)) and depth < 3:
+            for it in obj[:20]:
+                walk(it, depth + 1)
+
+    walk(snap)
+    if found:
+        preferred = [x for x in found if x >= 30]
+        return max(preferred or found)
+    return None
 
 
 def _fix_pct(v: Any) -> str:
@@ -390,8 +491,13 @@ def _build_shutuba(
         }
         rows_out.append(row)
 
-    # sort by umaban as stable default; site can re-sort
-    rows_out.sort(key=lambda r: int(r["馬番"]) if str(r["馬番"]).isdigit() else 99)
+    # UI デフォルトは「推定3着内率の高い順」（app.js は default 時に snapshot 順を維持）
+    rows_out.sort(
+        key=lambda r: (
+            -_parse_pct_number(r.get("推定3着内率")),
+            int(r["馬番"]) if str(r.get("馬番")).isdigit() else 99,
+        )
+    )
     return {
         "columns": columns,
         "mark_columns": mark_columns,
@@ -401,25 +507,34 @@ def _build_shutuba(
 
 
 def _pick_best_logic(logic_marks: dict[str, Any], rinfo: dict[str, Any]) -> tuple[str, str]:
-    explicit = rinfo.get("best_logic") or rinfo.get("sui") or rinfo.get("recommended_logic")
+    aliases = {
+        "ワトソン": "watson",
+        "ワトソンロジック": "watson",
+        "watson": "watson",
+        "アイリーン": "irene",
+        "irene": "irene",
+        "ハンター": "hunter",
+        "hunter": "hunter",
+        "ハ/ホプ": "hunter",
+        "ホプキンス": "hunter",
+        "hope": "hunter",
+        "モリア": "moriarty",
+        "モリアーティ": "moriarty",
+        "moriarty": "moriarty",
+    }
+    hm = rinfo.get("hunter_mode")
+    hl = rinfo.get("hunter_label")
+    if hm in (True, 1, "1", "true", "True") or (isinstance(hl, str) and "ハンター" in hl):
+        return "hunter", LOGIC_LABELS["hunter"]
+
+    explicit = rinfo.get("best_logic") or rinfo.get("sui") or rinfo.get("recommended_logic") or hl
     if explicit:
-        key = str(explicit).strip().lower()
-        aliases = {
-            "ワトソン": "watson",
-            "ワトソンロジック": "watson",
-            "アイリーン": "irene",
-            "ハンター": "hunter",
-            "ハ/ホプ": "hunter",
-            "モリア": "moriarty",
-            "モリアーティ": "moriarty",
-        }
-        key = aliases.get(str(explicit), key)
+        key = aliases.get(str(explicit).strip(), str(explicit).strip().lower())
         if key in LOGIC_LABELS:
             return key, LOGIC_LABELS[key]
         return key, str(explicit)
-    # prefer hunter in summer if present else watson/irene with marks
     for key in ("hunter", "irene", "watson", "moriarty"):
-        if isinstance(logic_marks.get(key), dict) and logic_marks.get(key):
+        if _mark_nonempty(logic_marks.get(key)):
             return key, LOGIC_LABELS.get(key, key)
     return "hunter", LOGIC_LABELS["hunter"]
 
@@ -435,29 +550,24 @@ def _cells_for(best_key: str, logic_marks: dict[str, Any], rinfo: dict[str, Any]
             "ハ/ホプ": _safe_str(existing.get("ハ/ホプ") or existing.get("ハンター") or "-") or "-",
             "ベ": _safe_str(existing.get("ベ") or "-") or "-",
         }
-    # minimal fallback: show which logic is active
-    label = {
-        "watson": "ワトソン",
-        "irene": "アイリーン",
-        "hunter": "ハンター",
-        "moriarty": "モリアーティ",
-    }.get(best_key, best_key)
     cells = {"ワ": "-", "アイ": "-", "モ": "-", "ハ/ホプ": "-", "ベ": "-"}
-    if best_key == "watson":
+    if _format_mark_map(logic_marks.get("watson")) != "-":
         cells["ワ"] = "様子・中位帯"
-    elif best_key == "irene":
+    if _format_mark_map(logic_marks.get("irene")) != "-":
         cells["アイ"] = "様子・様子見"
+    hl = rinfo.get("hunter_label")
+    if isinstance(hl, str) and hl.strip():
+        cells["ハ/ホプ"] = "ハンター"
+    elif _format_mark_map(logic_marks.get("hunter") or logic_marks.get("hope")) != "-":
+        cells["ハ/ホプ"] = "ハンター"
     elif best_key == "hunter":
         cells["ハ/ホプ"] = "ハンター"
-    elif best_key == "moriarty":
+    if best_key == "watson" and cells["ワ"] == "-":
+        cells["ワ"] = "様子・中位帯"
+    if best_key == "irene" and cells["アイ"] == "-":
+        cells["アイ"] = "様子・様子見"
+    if best_key == "moriarty":
         cells["モ"] = "モリアーティ"
-    else:
-        cells["ハ/ホプ"] = label
-    # mark presence soft signal
-    if _format_mark_map(logic_marks.get("watson")) != "-":
-        cells["ワ"] = cells["ワ"] if cells["ワ"] != "-" else "様子・中位帯"
-    if _format_mark_map(logic_marks.get("irene")) != "-":
-        cells["アイ"] = cells["アイ"] if cells["アイ"] != "-" else "様子・様子見"
     return cells
 
 
@@ -501,14 +611,11 @@ def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
     name = _safe_str(info.get("name") or rinfo.get("race_name") or rinfo.get("name"))
     start = _safe_str(info.get("start_time") or rinfo.get("start_time"))
 
-    holmes = rinfo.get("holmes_index") or rinfo.get("holmes") or ""
-    try:
-        if holmes != "" and float(holmes) == int(float(holmes)):
-            holmes = str(int(float(holmes)))
-        else:
-            holmes = _safe_str(holmes)
-    except Exception:
-        holmes = _safe_str(holmes)
+    score = _extract_holmes_score(rinfo)
+    if score is None:
+        holmes = ""
+    else:
+        holmes = str(int(round(score))) if abs(score - round(score)) < 1e-6 else f"{score:.1f}".rstrip("0").rstrip(".")
 
     return {
         "race_id": _safe_str(rid),
@@ -516,11 +623,12 @@ def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
         "R": r_no,
         "name": name,
         "start_time": start,
-        "weather": _safe_str(info.get("weather") or rinfo.get("weather")),
-        "baba": _safe_str(info.get("baba") or rinfo.get("baba")),
-        "dev": rinfo.get("dev"),
+        "weather": _safe_str(info.get("weather") or info.get("天候") or rinfo.get("weather")),
+        "baba": _safe_str(info.get("baba") or info.get("馬場") or rinfo.get("baba")),
+        "dev": _fmt_dev(rinfo.get("dev")),
         "rank": rinfo.get("rank"),
         "holmes_index": holmes,
+        "morning_holmes_index": holmes or None,
         "best_logic": best_key,
         "best_logic_label": best_label,
         "cells": cells,
@@ -566,7 +674,7 @@ def _matrix_row(r: dict[str, Any]) -> dict[str, Any]:
     return {
         "race_id": r.get("race_id"),
         "race": f"{r.get('place')} {r.get('R')}R {r.get('name')}".strip(),
-        "dev": _safe_str(r.get("dev")),
+        "dev": ("" if r.get("dev") is None else f"{float(r.get('dev')):.1f}"),
         "sui": sui,
         "holmes_index": holmes_disp,
         "ワトソン": cells.get("ワ", "-"),
@@ -608,13 +716,35 @@ def _top5(races: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
+    morning_map: dict[str, Any] = {}
+    try:
+        from public_viewer.export_public_snapshot import _morning_holmes_score_map  # type: ignore
+
+        morning_map = _morning_holmes_score_map(races_cache) or {}
+    except Exception:
+        morning_map = {}
+
     public_races: list[dict[str, Any]] = []
     skipped = 0
     for rid in sorted(races_cache.keys(), key=str):
-        pub = _race_to_public(str(rid), races_cache[rid])
+        rinfo = races_cache[rid]
+        if isinstance(rinfo, dict) and rid in morning_map and rinfo.get("holmes_index") in (None, ""):
+            try:
+                rinfo = dict(rinfo)
+                rinfo["holmes_index"] = float(morning_map[rid])
+            except Exception:
+                pass
+        pub = _race_to_public(str(rid), rinfo)
         if pub is None:
             skipped += 1
             continue
+        if rid in morning_map and not pub.get("holmes_index"):
+            try:
+                sc = float(morning_map[rid])
+                pub["holmes_index"] = str(int(round(sc)))
+                pub["morning_holmes_index"] = pub["holmes_index"]
+            except Exception:
+                pass
         public_races.append(pub)
     _apply_holmes_ranks(public_races)
 
@@ -713,6 +843,9 @@ def run() -> dict[str, Any]:
         "info_keys": sorted(str(k) for k in _info(r0).keys()) if isinstance(r0, dict) else [],
         "has_df": isinstance(r0, dict) and r0.get("df") is not None,
         "has_prediction": isinstance(r0, dict) and r0.get("prediction") is not None,
+        "holmes_gate_type": type(r0.get("holmes_gate_predict_snap")).__name__ if isinstance(r0, dict) else None,
+        "extracted_holmes": _extract_holmes_score(r0) if isinstance(r0, dict) else None,
+        "dev_fmt": _fmt_dev(r0.get("dev")) if isinstance(r0, dict) else None,
     }
     notes.append(f"sample={json.dumps(sample, ensure_ascii=False, default=str)[:800]}")
 
