@@ -844,9 +844,14 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   margin: 0 0 0.85rem;
 }
 .jump-timeline-scroll {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  max-height: min(22rem, 52vh);
+  overflow: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  border: 1px solid rgba(11, 61, 46, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 252, 245, 0.92);
+  scrollbar-gutter: stable;
 }
 .jump-scoreboard {
   width: max-content;
@@ -865,7 +870,7 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 .jump-scoreboard thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: #f3efe4;
   color: var(--accent);
   font-weight: 800;
@@ -873,8 +878,9 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 .jump-scoreboard-corner {
   position: sticky;
+  top: 0;
   left: 0;
-  z-index: 2;
+  z-index: 3;
   background: #ebe6d8;
   min-width: 3.2rem;
 }
@@ -925,6 +931,9 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
 }
 .sidebar-jump-timeline {
   margin: 0;
+}
+.sidebar-jump-timeline .jump-timeline-scroll {
+  max-height: min(18rem, 42vh);
 }
 .sidebar-jump-timeline .jump-scoreboard {
   font-size: 0.78rem;
