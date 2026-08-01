@@ -441,6 +441,58 @@ def _dump_export_helpers(export_mod: Any) -> Dict[str, Any]:
     return dumped
 
 
+def _fmt_bataiju_int(v: Any) -> str:
+    import re
+
+    if v is None or v == "":
+        return ""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        try:
+            x = float(v)
+        except Exception:
+            return ""
+        if x != x:
+            return ""
+        return str(int(round(x)))
+    s = str(v).strip()
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+        try:
+            return str(int(round(float(s))))
+        except Exception:
+            return s
+    m = re.match(r"^(-?\d+(?:\.\d+)?)(.*)$", s)
+    if m:
+        try:
+            return str(int(round(float(m.group(1))))) + m.group(2)
+        except Exception:
+            return s
+    return s
+
+
+def _normalize_shutuba_bataiju(snap: Dict[str, Any]) -> int:
+    """出馬表の馬体重を整数文字列に正規化（528.0 → 528）。"""
+    n = 0
+    for v in snap.get("venues") or []:
+        for r in v.get("races") or []:
+            shutuba = r.get("shutuba") if isinstance(r, dict) else None
+            if not isinstance(shutuba, dict):
+                continue
+            rows = shutuba.get("rows")
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict) or "馬体重" not in row:
+                    continue
+                new_v = _fmt_bataiju_int(row.get("馬体重"))
+                if new_v != str(row.get("馬体重") or ""):
+                    row["馬体重"] = new_v
+                    n += 1
+                elif row.get("馬体重") != new_v:
+                    row["馬体重"] = new_v
+                    n += 1
+    return n
+
+
 def _enrich_snap_holmes_from_helpers(
     export_mod: Any,
     snap: Dict[str, Any],
@@ -752,6 +804,8 @@ def main() -> int:
 
         enrich = _enrich_snap_holmes_from_helpers(export_mod, snap, races, day_rows)
         out["attempts"].append({"via": "enrich_holmes_from_helpers", **enrich})
+        bataiju_n = _normalize_shutuba_bataiju(snap)
+        out["attempts"].append({"via": "normalize_shutuba_bataiju", "changed": bataiju_n})
 
         q = _quality(snap, ref=ref)
         out["quality"] = q
