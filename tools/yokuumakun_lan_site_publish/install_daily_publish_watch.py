@@ -19,9 +19,12 @@ def main() -> int:
         "patch_pre_race_publish_on_success.py",
     ):
         src = here / name
-        if src.is_file():
-            shutil.copy2(src, root / name)
-            print(f"installed {root / name}")
+        dst = root / name
+        if src.is_file() and src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+            print(f"installed {dst}")
+        elif src.is_file():
+            print(f"already in place {dst}")
 
     # 直前成功パスへ publish を恒久注入（ファイルがあるときだけ）
     pre_race = root / "pre_race_auto_predict_worker.py"

@@ -46,10 +46,11 @@ def patch(root: Path) -> None:
     if not worker.is_file():
         raise SystemExit(f"missing {worker}")
 
-    # force_publish スクリプトをルートへ
+    # force_publish スクリプトをルートへ（既に同ファイルならスキップ）
     src = Path(__file__).resolve().parent / "force_publish_public_snapshot.py"
-    if src.is_file():
-        shutil.copy2(src, root / "force_publish_public_snapshot.py")
+    dst = root / "force_publish_public_snapshot.py"
+    if src.is_file() and src.resolve() != dst.resolve():
+        shutil.copy2(src, dst)
 
     text = worker.read_text(encoding="utf-8", errors="replace")
     text = _strip(text)

@@ -92,7 +92,9 @@ def _strip(text: str) -> str:
 def install(root: Path) -> None:
     root = root.resolve()
     src = Path(__file__).resolve().parent / "force_publish_public_snapshot.py"
-    shutil.copy2(src, root / "force_publish_public_snapshot.py")
+    dst = root / "force_publish_public_snapshot.py"
+    if src.is_file() and src.resolve() != dst.resolve():
+        shutil.copy2(src, dst)
 
     api = root / "admin_panel_api.py"
     if not api.is_file():
