@@ -273,6 +273,12 @@ class AutofixTests(unittest.TestCase):
         assert emb is not None
         self.assertIn("```bash", emb["description"])
 
+    def test_chunk_text_splits(self) -> None:
+        parts = _chunk_text("a" * 500, 200)
+        self.assertEqual(len(parts), 3)
+        self.assertEqual(len(parts[0]), 200)
+        self.assertEqual(len(parts[-1]), 100)
+
     def test_manual_fix_includes_eod_bundle_for_stop_failures(self) -> None:
         suite = SuiteResult(
             day="2026-08-01",
