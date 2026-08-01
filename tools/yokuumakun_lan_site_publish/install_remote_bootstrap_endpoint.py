@@ -69,8 +69,8 @@ def _handler_block(use_session: bool) -> str:
                 elif action == "install_lan_site_publish":
                     branch = str(
                         (payload or {{}}).get("branch")
-                        or "cursor/pre-race-viewer-auto-update-a29c"
-                    ).strip() or "cursor/pre-race-viewer-auto-update-a29c"
+                        or "cursor/viewer-publish-lag-immediate-19c2"
+                    ).strip() or "cursor/viewer-publish-lag-immediate-19c2"
                     script = (
                         "curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/"
                         + branch

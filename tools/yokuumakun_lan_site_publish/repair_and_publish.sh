@@ -3,7 +3,7 @@
 # 一斉予想の再取得は、キャッシュに prediction が無い/壊れている場合のみ有効。
 set -uo pipefail
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/pre-race-viewer-auto-update-a29c}"
+BRANCH="${1:-cursor/viewer-publish-lag-immediate-19c2}"
 BASE_RAW="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_lan_site_publish"
 LATEST_URL="https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json"
 
