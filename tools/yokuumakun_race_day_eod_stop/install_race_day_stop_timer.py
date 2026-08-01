@@ -10,14 +10,75 @@ import subprocess
 import sys
 from pathlib import Path
 
+_PLACEHOLDERS = frozenset(
+    {
+        "",
+        "…",
+        "...",
+        "....",
+        "YOUR_PASSWORD",
+        "your_password",
+        "changeme",
+        "password",
+    }
+)
+
+
+def _is_placeholder(pw: str) -> bool:
+    s = (pw or "").strip()
+    if s in _PLACEHOLDERS:
+        return True
+    if "←" in s:
+        return True
+    return False
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.is_file():
+        return
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            k, v = s.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip("'").strip('"')
+            if not k:
+                continue
+            cur = os.environ.get(k)
+            if cur is None:
+                os.environ[k] = v
+            elif _is_placeholder(cur) and not _is_placeholder(v):
+                os.environ[k] = v
+    except Exception:
+        pass
+
+
+def _sudo_password() -> str:
+    for key in ("YOKUMAKUN_SUDO_PASS", "YOKUMAKUN_SSH_PASS", "SUDO_PASSWORD"):
+        pw = (os.environ.get(key) or "").strip()
+        if pw and not _is_placeholder(pw):
+            return pw
+    return ""
+
 
 def _sudo_run(cmd: list[str], *, timeout: float = 90.0) -> subprocess.CompletedProcess[str]:
-    pw = (
-        os.environ.get("YOKUMAKUN_SUDO_PASS")
-        or os.environ.get("YOKUMAKUN_SSH_PASS")
-        or ""
-    ).strip()
+    pw = _sudo_password()
     if pw:
+        cached = subprocess.run(
+            ["sudo", "-n", "true"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if cached.returncode == 0:
+            return subprocess.run(
+                ["sudo", "-n"] + cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
         return subprocess.run(
             ["sudo", "-S", "-p", ""] + cmd,
             input=pw + "\n",
@@ -35,9 +96,21 @@ def _sudo_run(cmd: list[str], *, timeout: float = 90.0) -> subprocess.CompletedP
 
 def main(argv: list[str]) -> int:
     root = Path(argv[1] if len(argv) > 1 else "/opt/yokuumakun_auto-x").resolve()
+    _load_env_file(root / ".env")
+    _load_env_file(root / "server_deployment" / "hwm_runtime.env")
+
     here = Path(__file__).resolve().parent
     unit_dir = root / "server_deployment"
     unit_dir.mkdir(parents=True, exist_ok=True)
+
+    if not _sudo_password():
+        print(
+            "ERROR: no usable YOKUMAKUN_SUDO_PASS "
+            "(unset, or still a docs placeholder like '…'). "
+            f"Set a real sudo password in the environment or {root}/.env",
+            file=sys.stderr,
+        )
+        return 2
 
     stop = unit_dir / "race_day_stop_hwm.sh"
     if not stop.is_file():
@@ -92,6 +165,13 @@ def main(argv: list[str]) -> int:
         if cp.stderr and cp.returncode != 0:
             print(cp.stderr[-400:], file=sys.stderr)
         if cp.returncode != 0:
+            err = (cp.stderr or cp.stdout or "")
+            if "Authentication" in err:
+                print(
+                    "ERROR: sudo rejected YOKUMAKUN_SUDO_PASS. "
+                    f"Fix export or {root}/.env (replace any '…' placeholder).",
+                    file=sys.stderr,
+                )
             return cp.returncode
 
     # 確認表示

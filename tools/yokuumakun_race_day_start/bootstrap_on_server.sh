@@ -7,10 +7,33 @@ set -euo pipefail
 
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
 REF="${1:-${YOKUMAKUN_BOOTSTRAP_SHA:-cursor/race-day-timetable-guard-19c2}}"
-SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+
+is_placeholder_pass() {
+  case "${1:-}" in
+    ''|'…'|'...'|'....'|'YOUR_PASSWORD'|'your_password'|'changeme'|'password') return 0 ;;
+  esac
+  [[ "${1:-}" == *'←'* ]] && return 0
+  return 1
+}
+
+resolve_sudo_pass() {
+  local from_export="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
+  local from_file="" line val
+  if [[ -f "$ROOT/.env" ]]; then
+    line="$(grep -E '^YOKUMAKUN_SUDO_PASS=' "$ROOT/.env" 2>/dev/null | tail -n1 || true)"
+    val="${line#YOKUMAKUN_SUDO_PASS=}"
+    val="${val%$'\r'}"
+    val="${val#\"}"; val="${val%\"}"
+    val="${val#\'}"; val="${val%\'}"
+    from_file="$val"
+  fi
+  is_placeholder_pass "$from_export" && from_export=""
+  is_placeholder_pass "$from_file" && from_file=""
+  SUDO_PASS="${from_export:-$from_file}"
+}
 
 resolve_sha() {
   local ref="$1"
@@ -29,13 +52,14 @@ resolve_sha() {
     | python3 -c 'import sys,json; print(json.load(sys.stdin)["sha"])'
 }
 
+resolve_sudo_pass
 SHA="$(resolve_sha "$REF")"
 BASE="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${SHA}/tools/yokuumakun_race_day_start"
 JSDELIVR="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${SHA}/tools/yokuumakun_race_day_start"
 
 sudo_run() {
-  if [[ -n "$SUDO_PASS" ]]; then
-    echo "$SUDO_PASS" | sudo -S -p '' "$@"
+  if [[ -n "${SUDO_PASS:-}" ]]; then
+    printf '%s\n' "$SUDO_PASS" | sudo -S -p '' "$@"
   else
     sudo -n "$@" 2>/dev/null || sudo "$@"
   fi
@@ -100,8 +124,8 @@ chmod +x "$DEST/race_day_start_wrapper.sh" "$DEST/ensure_race_day_start_cron.sh"
 
 persist_sudo_pass_to_env
 export YOKUMAKUN_ROOT="$ROOT"
-export YOKUMAKUN_SUDO_PASS="$SUDO_PASS"
-export YOKUMAKUN_SSH_PASS="${YOKUMAKUN_SSH_PASS:-$SUDO_PASS}"
+export YOKUMAKUN_SUDO_PASS="${SUDO_PASS:-}"
+export YOKUMAKUN_SSH_PASS="${YOKUMAKUN_SSH_PASS:-${SUDO_PASS:-}}"
 
 PY="$ROOT/.venv/bin/python3"
 [[ -x "$PY" ]] || PY="$(command -v python3)"
@@ -109,7 +133,14 @@ PY="$ROOT/.venv/bin/python3"
 echo "=== install systemd timers (05:00 + 05:15) ==="
 # Run from TMP so installer src != server_deployment dst (avoids shutil.SameFileError)
 echo "INFO: running installer from $TMP/install_race_day_start_timer.py"
+set +e
 "$PY" "$TMP/install_race_day_start_timer.py" "$ROOT"
+TIMER_RC=$?
+set -e
+if [[ "$TIMER_RC" -ne 0 ]]; then
+  echo "WARN: systemd timer install failed (rc=$TIMER_RC) — cron backup still applied" >&2
+  echo "WARN: usually bad YOKUMAKUN_SUDO_PASS (docs '…' placeholder or wrong password)" >&2
+fi
 
 echo "=== install cron backup ==="
 bash "$DEST/ensure_race_day_start_cron.sh"

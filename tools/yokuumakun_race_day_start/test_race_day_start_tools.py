@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,17 +42,36 @@ class StartPackLayoutTest(unittest.TestCase):
 
             # Pretend the installer lives inside server_deployment (same as prod)
             with mock.patch.object(inst, "__file__", str(dest / "install_race_day_start_timer.py")):
-                with mock.patch.object(
-                    inst,
-                    "_sudo_run",
-                    return_value=mock.Mock(returncode=0, stdout="", stderr=""),
-                ):
-                    with mock.patch.object(inst.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="enabled\n", stderr="")):
-                        # Patch Path(__file__) usage by running main with root=td after
-                        # rewriting install to use mocked __file__ parent — call copy loop logic
-                        # via main: it uses Path(__file__).parent which is mocked module __file__
-                        rc = inst.main([str(dest / "install_race_day_start_timer.py"), str(root)])
+                with mock.patch.dict(os.environ, {"YOKUMAKUN_SUDO_PASS": "test-sudo-pass"}):
+                    with mock.patch.object(
+                        inst,
+                        "_sudo_run",
+                        return_value=mock.Mock(returncode=0, stdout="", stderr=""),
+                    ):
+                        with mock.patch.object(
+                            inst.subprocess,
+                            "run",
+                            return_value=mock.Mock(returncode=0, stdout="enabled\n", stderr=""),
+                        ):
+                            rc = inst.main([str(dest / "install_race_day_start_timer.py"), str(root)])
             self.assertEqual(rc, 0)
+
+    def test_rejects_placeholder_sudo_pass(self):
+        import install_race_day_start_timer as inst
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "server_deployment").mkdir()
+            env = {
+                k: v
+                for k, v in os.environ.items()
+                if k
+                not in ("YOKUMAKUN_SUDO_PASS", "YOKUMAKUN_SSH_PASS", "SUDO_PASSWORD")
+            }
+            env["YOKUMAKUN_SUDO_PASS"] = "…"
+            with mock.patch.dict(os.environ, env, clear=True):
+                rc = inst.main(["install_race_day_start_timer.py", str(root)])
+            self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":
