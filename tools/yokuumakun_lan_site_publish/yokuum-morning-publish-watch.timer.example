@@ -1,0 +1,20 @@
+[Unit]
+Description=Timer: publish public snapshot after morning bulk if still empty
+
+[Timer]
+# 開催日朝〜昼過ぎまで数分おき（一斉予想の完了遅れを拾う）
+OnCalendar=*-*-* 05:30:00
+OnCalendar=*-*-* 06:00:00
+OnCalendar=*-*-* 06:30:00
+OnCalendar=*-*-* 07:00:00
+OnCalendar=*-*-* 07:30:00
+OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 08:30:00
+OnCalendar=*-*-* 09:00:00
+OnCalendar=*-*-* 10:00:00
+OnCalendar=*-*-* 11:00:00
+Persistent=true
+Unit=yokuum-morning-publish-watch.service
+
+[Install]
+WantedBy=timers.target

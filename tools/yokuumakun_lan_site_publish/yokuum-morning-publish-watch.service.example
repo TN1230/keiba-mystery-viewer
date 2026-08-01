@@ -1,0 +1,12 @@
+[Unit]
+Description=yokuumakun morning-bulk public snapshot publish watch (oneshot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tn
+WorkingDirectory=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+Environment=TZ=Asia/Tokyo
+ExecStart=/opt/yokuumakun_auto-x/.venv/bin/python /opt/yokuumakun_auto-x/morning_bulk_publish_watch.py
+Nice=10

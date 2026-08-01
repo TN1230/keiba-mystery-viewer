@@ -97,6 +97,10 @@ def main() -> int:
             "patch_worker_publish_on_success.py",
             "install_publish_endpoint.py",
             "install_remote_bootstrap_endpoint.py",
+            "morning_bulk_publish_watch.py",
+            "install_daily_publish_watch.py",
+            "yokuum-morning-publish-watch.service.example",
+            "yokuum-morning-publish-watch.timer.example",
         ):
             local = LOCAL_DIR / name
             if local.is_file():
@@ -104,16 +108,23 @@ def main() -> int:
                 log(f"uploaded {name}")
         sftp.close()
 
-        # 1) パッチ適用 + 即 publish（sudo は admin 再起動のみ）
+        # 1) パッチ適用 + 即 publish + 明日以降用 timer
         cmd = " && ".join(
             [
+                f"export YOKUMAKUN_SUDO_PASS={shlex.quote(pw)}",
                 f"python3 {remote_tmp}/patch_worker_publish_on_success.py {REMOTE_ROOT}",
                 f"python3 {remote_tmp}/install_publish_endpoint.py {REMOTE_ROOT}",
                 f"python3 {remote_tmp}/install_remote_bootstrap_endpoint.py {REMOTE_ROOT} || true",
-                f"cp {remote_tmp}/force_publish_public_snapshot.py {REMOTE_ROOT}/",
+                f"cp {remote_tmp}/force_publish_public_snapshot.py "
+                f"{remote_tmp}/morning_bulk_publish_watch.py {REMOTE_ROOT}/",
+                f"mkdir -p {REMOTE_ROOT}/server_deployment && "
+                f"cp {remote_tmp}/yokuum-morning-publish-watch.*.example "
+                f"{REMOTE_ROOT}/server_deployment/",
                 f"cd {REMOTE_ROOT} && .venv/bin/python -m py_compile "
-                "force_publish_public_snapshot.py morning_bulk_server_worker.py admin_panel_api.py",
+                "force_publish_public_snapshot.py morning_bulk_publish_watch.py "
+                "morning_bulk_server_worker.py admin_panel_api.py",
                 f"cd {REMOTE_ROOT} && .venv/bin/python force_publish_public_snapshot.py",
+                f"python3 {remote_tmp}/install_daily_publish_watch.py {REMOTE_ROOT}",
                 _sudo(pw, "systemctl restart yokuum-admin-panel.service") + " || true",
                 "sleep 1",
                 "curl -sS http://127.0.0.1:8791/health || true",

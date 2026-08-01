@@ -1,36 +1,27 @@
-# 閲覧サイト強制公開（LAN / サーバー直実行）
+# 閲覧サイト強制公開 + 明日以降の自動公開（LAN / サーバー直実行）
 
-## 今週サイトが空のままな理由
+## 今週空だった理由
+朝一斉は成功しても、成功パスが `snapshots/latest.json` を更新していなかった。
 
-- **予想自体は成功している**（例: 2026-08-01 10:40 `morning_bulk_done` 36/36 `quality_ok: true`）
-- しかし朝一斉ワーカーの**成功パスが `snapshots/latest.json` を更新していなかった**
-- 先週見えていた更新は、主に UI/自動予想側の `_publish_public_viewer_snapshot` や開催終了処理側からだった
-- 開催終了で `latest.json` は空（cleared）に戻る。今朝の一斉成功後に再 publish が無かったため空のまま
+## このツールが入れるもの
+1. **今すぐ** キャッシュから `latest.json` を強制公開
+2. **朝一斉ワーカー**成功時に自動 publish（恒久パッチ）
+3. **systemd timer**（05:30–11:00）で、完了済みなのに latest が空なら再 publish（保険）
 
-クラウドや SSH インターネット公開は、この公開漏れとは別問題です。
+## サーバーで実行（推奨）
+```bash
+export YOKUMAKUN_SUDO_PASS='83670824'
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
+```
 
-## 推奨: 先週と同じ Windows LAN + paramiko
-
-自宅 LAN 上の Windows で:
-
+## Windows LAN（先週と同じ paramiko）
 ```powershell
-cd <この tools\yokuumakun_lan_site_publish>
+cd tools\yokuumakun_lan_site_publish
 powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 ```
 
-接続先は従来どおり `tn@192.168.128.178`、パスワードは `Desktop\ローカルサーバーIP.txt` の `pass:`。
-
-## サーバー上で直接
-
-```bash
-export YOKUMAKUN_SUDO_PASS='（SSHと同じパスワード）'
-curl -fsSL https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash
-```
-
 ## 成功確認
-
 ```bash
 curl -fsSL https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json | head -c 400
+systemctl is-enabled yokuum-morning-publish-watch.timer
 ```
-
-`schedule_date` が当日、`race_count` > 0、`cleared` が無いこと。
