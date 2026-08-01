@@ -607,9 +607,62 @@
     }
     return (
       `ホームズ推奨: <span class="holmes-recommend">` +
-      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="34" height="34" decoding="async" />` +
       `<strong>${escapeHtml(label)}</strong></span>`
     );
+  }
+
+  function formatPredictedAtLabel(raw) {
+    if (raw == null || raw === "") return "未更新";
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const d = new Date(raw * (raw < 1e12 ? 1000 : 1));
+      if (!Number.isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+    }
+    const s = String(raw).trim();
+    if (!s) return "未更新";
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2})(?::\d{2})?/);
+    if (m) return `${m[1]} ${m[2]}`;
+    const m2 = s.match(/^(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}:\d{2})/);
+    if (m2) return `${m2[1]} ${m2[2]}`;
+    return s;
+  }
+
+  /** 芝/ダート/障害 + 距離。例: ダート1000m（右）。（不明）はノイズなので付けない。 */
+  function formatCourseDistanceLabel(race) {
+    if (!race || typeof race !== "object") return "";
+    const stripNoiseDiv = (label) =>
+      String(label || "")
+        .replace(/[（(]\s*(不明|未知|なし|unknown|n\/a|na|none|\?|？)\s*[）)]/gi, "")
+        .trim();
+
+    const ready = stripNoiseDiv(race.course_label);
+    if (ready) return ready;
+
+    const rawCourse = String(race.course || race.surface || "").trim();
+    let surface = "";
+    if (/障害|^障/.test(rawCourse)) surface = "障害";
+    else if (/ダート|^ダ|dirt/i.test(rawCourse)) surface = "ダート";
+    else if (/芝|turf/i.test(rawCourse)) surface = "芝";
+
+    const distRaw = String(race.distance || "").trim() || rawCourse;
+    const dm = distRaw.match(/(\d{3,4})\s*m?/i);
+    const dist = dm ? dm[1] : "";
+
+    let div = String(race.course_division || "").trim().replace(/^[（(【\[]|[）)】\]]$/g, "");
+    if (/直線/.test(div)) div = "直線";
+    else if (/右/.test(div)) div = "右";
+    else if (/左/.test(div)) div = "左";
+    else div = ""; // 不明などは付けない
+
+    if (!surface && !dist) return "";
+    let label = surface && dist ? `${surface}${dist}m` : surface || `${dist}m`;
+    if ((div === "右" || div === "左" || div === "直線") && !label.includes(div)) {
+      label = `${label}（${div}）`;
+    }
+    return label;
   }
 
   function renderDetail() {
@@ -622,9 +675,20 @@
     const r = found.race;
     const marks = r.marks || {};
     const cells = r.cells || {};
+    const predictedAtLabel = formatPredictedAtLabel(r.predicted_at);
+    const courseLabel = formatCourseDistanceLabel(r);
+    const coursePart = courseLabel
+      ? ` ／ <span class="race-course">${escapeHtml(courseLabel)}</span>`
+      : "";
+    const paceLabel = String(r.pace_label || "").trim();
+    const paceLine = paceLabel
+      ? `<p class="meta race-pace">予想ペース: <strong>${escapeHtml(paceLabel)}</strong></p>`
+      : "";
     let html = `
       <h3>${escapeHtml(r.place)} ${escapeHtml(r.R)}R ${escapeHtml(r.name || "")}</h3>
-      <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      <p class="meta">発走 ${escapeHtml(r.start_time || "-")}${coursePart} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      ${paceLine}
+      <p class="meta race-predicted-at">予想更新時間: <strong>${escapeHtml(predictedAtLabel)}</strong></p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
       <p class="meta">${formatHolmesRecommendHtml(r)}</p>
@@ -732,7 +796,8 @@
     const m = s.match(
       /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
     );
-    const lines = [];
+    // 【最終更新日時】であることが一目で分かるよう見出し付きで表示
+    const lines = ["【最終更新日時】"];
     if (m) {
       lines.push(`📅${m[1]}`);
       if (m[2]) lines.push(`⏰${m[2]}`);
