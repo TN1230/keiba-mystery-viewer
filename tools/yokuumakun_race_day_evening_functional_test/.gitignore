@@ -1,0 +1,3 @@
+_deploy_*.txt
+__pycache__/
+*.pyc
