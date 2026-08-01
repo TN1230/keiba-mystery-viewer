@@ -500,6 +500,20 @@ def main():
 
 
 class PublishWatchDecisionTests(unittest.TestCase):
+    def test_parse_dt_accepts_unix_float(self) -> None:
+        from morning_bulk_publish_watch import _parse_dt
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        jst = ZoneInfo("Asia/Tokyo")
+        ts = datetime(2026, 8, 1, 16, 4, 40, tzinfo=jst).timestamp()
+        dt = _parse_dt(ts)
+        self.assertIsNotNone(dt)
+        assert dt is not None
+        self.assertEqual(dt.strftime("%Y-%m-%d %H:%M:%S"), "2026-08-01 16:04:40")
+        dt2 = _parse_dt(str(ts))
+        self.assertIsNotNone(dt2)
+
     def test_cache_newer_than_public_triggers_publish(self) -> None:
         from morning_bulk_publish_watch import decide_publish
         import pickle
@@ -626,6 +640,62 @@ class PublishWatchDecisionTests(unittest.TestCase):
             out = decide_publish(root, "2026-08-01", snap)
             self.assertEqual(out["action"], "force_publish")
             self.assertEqual(out["reason"], "stale_during_prerace")
+
+    def test_float_cache_predicted_at_triggers_publish(self) -> None:
+        """本番キャッシュは predicted_at が Unix float。これを読めないと恒久自動更新が死ぬ。"""
+        from morning_bulk_publish_watch import decide_publish
+        import pickle
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        jst = ZoneInfo("Asia/Tokyo")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            logs = root / "logs"
+            logs.mkdir()
+            (logs / "morning_bulk_done_2026-08-01.flag").write_text("ok", encoding="utf-8")
+            races = {
+                "202601010312": {
+                    "predicted_at": datetime(2026, 8, 1, 15, 46, 44, tzinfo=jst).timestamp()
+                },
+                "202604020308": {
+                    "predicted_at": datetime(2026, 8, 1, 16, 4, 40, tzinfo=jst).timestamp()
+                },
+            }
+            with (logs / "morning_bulk_races_20260801.pkl").open("wb") as f:
+                pickle.dump(races, f)
+            snap = {
+                "schedule_date": "2026-08-01",
+                "race_count": 2,
+                "updated_at": "2026-08-01T15:57:19",
+                "venues": [
+                    {
+                        "place": "札幌",
+                        "races": [
+                            {
+                                "race_id": "202601010312",
+                                "R": "12",
+                                "start_time": "16:01",
+                                "predicted_at": "2026-08-01 10:36:51",
+                            }
+                        ],
+                    },
+                    {
+                        "place": "新潟",
+                        "races": [
+                            {
+                                "race_id": "202604020308",
+                                "R": "8",
+                                "start_time": "16:20",
+                                "predicted_at": "2026-08-01 10:37:27",
+                            }
+                        ],
+                    },
+                ],
+            }
+            out = decide_publish(root, "2026-08-01", snap)
+            self.assertEqual(out["action"], "force_publish")
+            self.assertEqual(out["reason"], "cache_newer_than_public")
 
     def test_per_race_cache_newer_triggers_publish(self) -> None:
         from morning_bulk_publish_watch import decide_publish

@@ -268,6 +268,78 @@ def _publish_via_hwm(force: bool = True) -> dict[str, Any]:
     return {"ok": True, "via": "hwm._publish_public_viewer_snapshot", "force": force}
 
 
+def _parse_predicted_at(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_JST)
+        return dt.astimezone(_JST)
+    if isinstance(value, (int, float)):
+        try:
+            ts = float(value)
+            if 1_000_000_000 <= ts < 10_000_000_000:
+                return datetime.fromtimestamp(ts, tz=_JST)
+        except Exception:
+            return None
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        ts = float(s)
+        if 1_000_000_000 <= ts < 10_000_000_000:
+            return datetime.fromtimestamp(ts, tz=_JST)
+    except Exception:
+        pass
+    s2 = s.replace("T", " ").replace("Z", "")
+    if "+" in s2[10:]:
+        s2 = s2.split("+", 1)[0].strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s2[:19], fmt).replace(tzinfo=_JST)
+        except Exception:
+            continue
+    return None
+
+
+def _max_predicted_at(races_or_snap: Any, *, public: bool = False) -> datetime | None:
+    best: datetime | None = None
+    items: list[Any]
+    if public and isinstance(races_or_snap, dict):
+        items = []
+        for v in races_or_snap.get("venues") or []:
+            if isinstance(v, dict):
+                items.extend(v.get("races") or [])
+    elif isinstance(races_or_snap, dict):
+        items = list(races_or_snap.values())
+    else:
+        items = []
+    for r in items:
+        if not isinstance(r, dict):
+            continue
+        dt = _parse_predicted_at(r.get("predicted_at"))
+        if dt and (best is None or dt > best):
+            best = dt
+    return best
+
+
+def _hwm_reflects_cache(latest: dict[str, Any], races: dict[str, Any]) -> tuple[bool, str]:
+    """hwm 経路は成功を返しても直前の predicted_at を載せないことがある。"""
+    cache_max = _max_predicted_at(races, public=False)
+    pub_max = _max_predicted_at(latest, public=True)
+    if cache_max is None:
+        return True, "no_cache_predicted_at"
+    if pub_max is None:
+        return False, f"public_missing_predicted_at cache={cache_max.isoformat()}"
+    if cache_max > pub_max + timedelta(seconds=45):
+        return (
+            False,
+            f"public_pred_stale cache={cache_max.isoformat()} public={pub_max.isoformat()}",
+        )
+    return True, "predicted_at_ok"
+
+
 def _upload_diag(payload: dict[str, Any]) -> str | None:
     try:
         from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
@@ -372,7 +444,7 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
         errors.append(f"export_none: {type(e).__name__}: {e}")
         attempts.append({"ok": False, "error": errors[-1]})
 
-    # 3) hwm 経路（UI と同じ）
+    # 3) hwm 経路（UI と同じ）— 成功でも predicted_at が古いなら不合格にして続行
     try:
         out = _publish_via_hwm(force=force)
         # hwm は戻り値が薄いので latest を確認
@@ -391,6 +463,13 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
             if rc <= 0:
                 out["ok"] = False
                 out["error"] = "hwm_publish_still_empty"
+            else:
+                reflected, why = _hwm_reflects_cache(latest or {}, races)
+                out["cache_reflect"] = why
+                if not reflected:
+                    out["ok"] = False
+                    out["error"] = "hwm_publish_predicted_at_stale"
+                    notes.append(f"hwm_stale:{why}")
         except Exception as e:
             out["latest_check_error"] = f"{type(e).__name__}: {e}"
         out["n_races_cache"] = len(races)
@@ -398,11 +477,12 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
         out["export_errors"] = errors
         out["notes"] = notes
         out["attempts"] = attempts
-        notes.append(str(_upload_diag(out)))
         if out.get("ok"):
+            notes.append(str(_upload_diag(out)))
             return out
         attempts.append(dict(out))
         errors.append(str(out.get("error") or "hwm_failed"))
+        notes.append(str(_upload_diag(dict(out))))
     except Exception as e:
         errors.append(f"hwm: {type(e).__name__}: {e}")
         attempts.append({"ok": False, "error": errors[-1]})

@@ -75,11 +75,32 @@ def _cache_exists(root: Path, day: str) -> bool:
 
 
 def _parse_dt(value: Any) -> datetime | None:
+    """文字列日時に加え、キャッシュの Unix 秒(float/int)も解釈する。"""
     if value is None:
         return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_JST)
+        return dt.astimezone(_JST)
+    if isinstance(value, (int, float)):
+        try:
+            ts = float(value)
+            # ミリ秒誤検出を避ける（2001〜2286年相当の秒）
+            if 1_000_000_000 <= ts < 10_000_000_000:
+                return datetime.fromtimestamp(ts, tz=_JST)
+        except Exception:
+            return None
     s = str(value).strip()
     if not s:
         return None
+    # "1785547781.997" のような数値文字列
+    try:
+        ts = float(s)
+        if 1_000_000_000 <= ts < 10_000_000_000:
+            return datetime.fromtimestamp(ts, tz=_JST)
+    except Exception:
+        pass
     s = s.replace("T", " ").replace("Z", "")
     if "+" in s[10:]:
         s = s.split("+", 1)[0].strip()
@@ -293,14 +314,68 @@ def decide_publish(root: Path, day: str, snap: dict[str, Any] | None) -> dict[st
     return out
 
 
+def _ensure_permanent_hooks(root: Path) -> dict[str, Any]:
+    """指示なしで翌日以降も動くよう、パッチ欠落・timer 停止を自己修復する。"""
+    info: dict[str, Any] = {"patched_pre_race": False, "timer_ok": None}
+    worker = root / "pre_race_auto_predict_worker.py"
+    patcher = root / "patch_pre_race_publish_on_success.py"
+    try:
+        if worker.is_file():
+            text = worker.read_text(encoding="utf-8", errors="replace")
+            if "BEGIN pre_race_publish_on_success" not in text and patcher.is_file():
+                import subprocess
+
+                cp = subprocess.run(
+                    [sys.executable, str(patcher), str(root)],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                info["patched_pre_race"] = cp.returncode == 0
+                info["patch_rc"] = cp.returncode
+                info["patch_out"] = ((cp.stdout or "") + (cp.stderr or ""))[-300:]
+            else:
+                info["patched_pre_race"] = "BEGIN pre_race_publish_on_success" in text
+    except Exception as e:
+        info["patch_error"] = f"{type(e).__name__}: {e}"
+
+    try:
+        import subprocess
+
+        cp = subprocess.run(
+            ["systemctl", "is-enabled", "yokuum-morning-publish-watch.timer"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        enabled = (cp.stdout or "").strip() == "enabled"
+        info["timer_ok"] = enabled
+        if not enabled:
+            installer = root / "install_daily_publish_watch.py"
+            if installer.is_file():
+                cp2 = subprocess.run(
+                    [sys.executable, str(installer), str(root)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                info["timer_reinstall_rc"] = cp2.returncode
+                info["timer_reinstall_out"] = ((cp2.stdout or "") + (cp2.stderr or ""))[-400:]
+    except Exception as e:
+        info["timer_error"] = f"{type(e).__name__}: {e}"
+    return info
+
+
 def main() -> int:
     root = _root()
     os.chdir(root)
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+    ensure = _ensure_permanent_hooks(root)
     day = _today()
     snap = _fetch_public()
     out = decide_publish(root, day, snap)
+    out["ensure"] = ensure
 
     if out.get("action") != "force_publish":
         print(json.dumps(out, ensure_ascii=False, default=str))
@@ -310,6 +385,7 @@ def main() -> int:
 
     result = run_publish(force=True)
     out["result"] = result
+    # hwm が偽成功しても standalone まで落ちるよう force_publish 側で不合格化済み
     print(json.dumps(out, ensure_ascii=False, default=str))
     return 0 if result.get("ok") else 1
 
