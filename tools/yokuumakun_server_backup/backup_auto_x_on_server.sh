@@ -51,9 +51,10 @@ discover_dest() {
       || true
   )
 
-  # 2) Existing backup directories that already hold auto-x snapshots
+  # 2) Known / existing backup directories that already hold auto-x snapshots
   local cand
   for cand in \
+    /home/tn/yokuumakun_auto-x_backups \
     /opt/yokuumakun_backups \
     /opt/backups/yokuumakun \
     /opt/backups \
@@ -85,6 +86,7 @@ discover_dest() {
 
   # 5) Known empty dests
   for cand in \
+    /home/tn/yokuumakun_auto-x_backups \
     /opt/yokuumakun_backups \
     /opt/backups/yokuumakun \
     /home/tn/backups/yokuumakun \
@@ -96,8 +98,8 @@ discover_dest() {
     fi
   done
 
-  # Last resort
-  printf '%s\n' "/opt/yokuumakun_backups"
+  # Last resort (matches weekly backup location on tn1230server)
+  printf '%s\n' "/home/tn/yokuumakun_auto-x_backups"
 }
 
 ensure_dir() {
@@ -186,4 +188,4 @@ log "OK output=$OUT"
 log "OK manifest=$MANIFEST"
 ls -lah "$OUT" "$MANIFEST" || true
 log "--- recent items in $DEST ---"
-ls -lahdt "$DEST"/yokuumakun_auto* "$DEST"/*manifest.txt 2>/dev/null | head -n 20 || ls -lah "$DEST" | head -n 30
+ls -lahdt "$DEST"/yokuumakun_auto* 2>/dev/null | head -n 20 || ls -lah "$DEST" | head -n 30

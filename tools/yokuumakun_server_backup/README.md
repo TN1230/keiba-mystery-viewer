@@ -33,9 +33,9 @@ powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 
 1. `YOKUMAKUN_BACKUP_DEST`（明示指定時）
 2. cron / systemd のバックアップ系ジョブが指すパス
-3. `/opt/yokuumakun_backups` など、既存の `yokuumakun_auto*` バックアップがある場所
+3. 既存の週次保存先（実機確認済み: `/home/tn/yokuumakun_auto-x_backups`）など
 4. `/opt` 直下に `yokuumakun_auto-x_*` の兄弟コピーがある場合は `/opt`
-5. 見つからない場合は `/opt/yokuumakun_backups` を作成
+5. 見つからない場合は `/home/tn/yokuumakun_auto-x_backups` を作成
 
 成果物名の例:
 
