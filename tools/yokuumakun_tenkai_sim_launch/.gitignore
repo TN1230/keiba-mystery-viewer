@@ -1,0 +1,4 @@
+_deploy_tenkai_sim_out.txt
+.sim_source
+__pycache__/
+*.pyc

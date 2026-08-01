@@ -57,15 +57,52 @@
         <button type="button" class="admin-btn admin-btn-action" id="btnMorningBulk">① 一斉予想再実行</button>
         <button type="button" class="admin-btn admin-btn-action" id="btnForcePublish">② 閲覧サイト強制公開</button>
         <button type="button" class="admin-btn admin-btn-action" id="btnModemReboot">③ モデム再起動</button>
-        <button type="button" class="admin-btn admin-btn-action" id="btnOpsLogs">④ 過去24時間の動作ログ</button>
-        <button type="button" class="admin-btn admin-btn-secondary" id="btnLogout">⑤ ログアウト</button>
+        <!-- BEGIN TEMP: TENKAI_SIM_LAUNCH -->
+        <button type="button" class="admin-btn admin-btn-action" id="btnTenkaiSim" hidden>④ 展開シミュレーション起動</button>
+        <!-- END TEMP: TENKAI_SIM_LAUNCH -->
+        <button type="button" class="admin-btn admin-btn-action" id="btnOpsLogs">⑤ 過去24時間の動作ログ</button>
+        <button type="button" class="admin-btn admin-btn-secondary" id="btnLogout">⑥ ログアウト</button>
       </nav>
       <p class="admin-status" id="menuStatus" role="status" aria-live="polite"></p>
     </section>
 
+    <!-- BEGIN TEMP: TENKAI_SIM_LAUNCH -->
+    <section class="admin-card admin-tenkai-card" id="tenkaiSimPanel" hidden>
+      <div class="admin-logs-head">
+        <h2 class="admin-section-title">④ 展開シミュレーション起動</h2>
+        <div class="admin-logs-actions">
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-small" id="btnTenkaiClose">閉じる</button>
+        </div>
+      </div>
+      <p class="admin-hint" id="tenkaiSimMeta">当日予想データから会場・レースを選ぶと、別タブでシミュレーションを開きます。</p>
+      <div id="tenkaiVenueTabs" class="tabs admin-tenkai-tabs" role="tablist" aria-label="会場"></div>
+      <p class="hint admin-tenkai-legend">閲覧サイトのサイドバーと同じ場内ジャンプです。レースを押すと別タブで開きます。</p>
+      <div id="tenkaiJumpButtons" class="jump-row admin-tenkai-jumps"></div>
+      <div class="admin-tenkai-manual">
+        <p class="hint">一覧が空のとき（EOD後など）は race_id を直指定できます。</p>
+        <div class="admin-tenkai-manual-row">
+          <label class="admin-field">
+            <span>race_id</span>
+            <input type="text" id="tenkaiManualRaceId" inputmode="numeric" autocomplete="off" placeholder="例: 202608010501" />
+          </label>
+          <label class="admin-field">
+            <span>場所</span>
+            <input type="text" id="tenkaiManualPlace" autocomplete="off" placeholder="任意" />
+          </label>
+          <label class="admin-field">
+            <span>R</span>
+            <input type="text" id="tenkaiManualR" inputmode="numeric" autocomplete="off" placeholder="任意" />
+          </label>
+          <button type="button" class="admin-btn admin-btn-action" id="btnTenkaiManualOpen">この race_id で開く</button>
+        </div>
+      </div>
+      <p class="admin-status" id="tenkaiSimStatus" role="status" aria-live="polite"></p>
+    </section>
+    <!-- END TEMP: TENKAI_SIM_LAUNCH -->
+
     <section class="admin-card" id="logsPanel" hidden>
       <div class="admin-logs-head">
-        <h2 class="admin-section-title">④ 過去24時間の動作ログ</h2>
+        <h2 class="admin-section-title">⑤ 過去24時間の動作ログ</h2>
         <div class="admin-logs-actions">
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-small" id="btnLogsRefresh">更新</button>
           <button type="button" class="admin-btn admin-btn-secondary admin-btn-small" id="btnLogsClose">閉じる</button>
