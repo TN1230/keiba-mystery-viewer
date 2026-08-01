@@ -31,7 +31,7 @@
 ## 今すぐレースをサイトへ反映 / 品質修復（最短）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/viewer-publish-lag-immediate-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-course-distance-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
 ```
 
 成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数がレースごとに異なる・出馬表が推定3着内率順、を確認。
@@ -46,7 +46,7 @@ gate の `score=25` や壊れた日の定数 `5` はホームズ指数として�
 ## サーバーで実行（恒久パッチ込み）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/viewer-publish-lag-immediate-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-course-distance-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
 ```
 
 ## Windows LAN（先週と同じ paramiko）
