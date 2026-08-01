@@ -904,11 +904,89 @@
     else if (ACC_MQ.addListener) ACC_MQ.addListener(onChange);
   }
 
+  function initBackToTop() {
+    const btn = $("backToTop");
+    const logo = document.querySelector(".brand-logo");
+    if (!btn) return;
+
+    const MOBILE_MQ = window.matchMedia("(max-width: 720px)");
+    let logoVisible = true;
+    let observer = null;
+
+    function sync() {
+      const show = MOBILE_MQ.matches && !logoVisible;
+      btn.hidden = !show;
+    }
+
+    function observeLogo() {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      if (!logo || typeof IntersectionObserver === "undefined") {
+        // フォールバック: スクロール位置で判定
+        logoVisible = true;
+        const onScroll = () => {
+          if (!MOBILE_MQ.matches) {
+            logoVisible = true;
+            sync();
+            return;
+          }
+          logoVisible = window.scrollY < 72;
+          sync();
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+        return;
+      }
+      observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          logoVisible = !!(entry && entry.isIntersecting && entry.intersectionRatio > 0);
+          sync();
+        },
+        { root: null, threshold: 0 }
+      );
+      observer.observe(logo);
+      sync();
+    }
+
+    btn.addEventListener("click", () => {
+      const reduce =
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+      // 先頭付近のフォーカス可能な見出しへ（任意）
+      const brand = $("brandName");
+      if (brand && typeof brand.focus === "function") {
+        const prev = brand.getAttribute("tabindex");
+        if (prev == null) brand.setAttribute("tabindex", "-1");
+        try {
+          brand.focus({ preventScroll: true });
+        } catch (_) {
+          brand.focus();
+        }
+      }
+    });
+
+    const onMq = () => {
+      if (!MOBILE_MQ.matches) {
+        logoVisible = true;
+        sync();
+      } else {
+        observeLogo();
+      }
+    };
+    if (MOBILE_MQ.addEventListener) MOBILE_MQ.addEventListener("change", onMq);
+    else if (MOBILE_MQ.addListener) MOBILE_MQ.addListener(onMq);
+    observeLogo();
+  }
+
   setCtas();
   applyCastIconMode();
   initAccordion();
   initShutubaSortControls();
   initJumpLayoutControls();
+  initBackToTop();
   loadSnapshot();
   const poll = Number(cfg.POLL_INTERVAL_MS) || 30000;
   if (poll > 0) {
