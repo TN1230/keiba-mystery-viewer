@@ -19,6 +19,8 @@ from race_day_evening_functional_test import (
     _rebuild_bugs_warnings,
     _report_has_errors,
     attempt_autofixes,
+    build_manual_fix_commands,
+    build_manual_fix_embed,
     build_report,
     collect_unresolved_remediations,
     remediation_advice,
@@ -260,8 +262,36 @@ class AutofixTests(unittest.TestCase):
         self.assertIn("morning_bulk_cache", desc)
         self.assertIn("自己修正対象外", desc)
         self.assertIn("→", desc)
-        self.assertIn("朝一斉", remediation_advice("morning_bulk_cache"))
+        self.assertIn("手動修正コマンド", remediation_advice("morning_bulk_cache"))
+        self.assertIn("【手動修正コマンド】", desc)
         self.assertEqual(color, 0xE74C3C)
+        cmds = build_manual_fix_commands(suite)
+        self.assertIn("morning_bulk_cache", cmds)
+        self.assertIn("YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x", cmds)
+        emb = build_manual_fix_embed(suite)
+        assert emb is not None
+        self.assertIn("```bash", emb["description"])
+
+    def test_manual_fix_includes_eod_bundle_for_stop_failures(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-01",
+            started_at="t0",
+            finished_at="t1",
+            overall_ok=False,
+            bugs=["eod_snapshot_state: latest not cleared"],
+            checks=[
+                CheckResult(
+                    "eod_snapshot_state",
+                    False,
+                    "latest not cleared",
+                    "error",
+                )
+            ],
+        )
+        cmds = build_manual_fix_commands(suite)
+        self.assertIn("一括:", cmds)
+        self.assertIn("bootstrap_on_server.sh", cmds)
+        self.assertIn("clear_latest", cmds)
 
     def test_collect_unresolved_skips_ok_checks(self) -> None:
         suite = SuiteResult(

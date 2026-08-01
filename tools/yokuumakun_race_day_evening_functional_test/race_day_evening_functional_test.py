@@ -64,62 +64,151 @@ NON_AUTOFIXABLE_CHECKS = frozenset(
 # 自己修正しなかった（または失敗した）項目向けの手動対処ガイド
 REMEDIATION_BY_CHECK: dict[str, str] = {
     "morning_bulk_cache": (
-        "当日の朝一斉が未実施/失敗の可能性。logs/morning_bulk_*.log と "
-        "morning_bulk_races_YYYYMMDD.pkl / morning_bulk_done_*.flag を確認。"
-        "当日分の再生成は通常不可なので、翌朝の cron/timer・worker 設定を点検。"
+        "当日の朝一斉が未実施/失敗の可能性。"
+        "下の【手動修正コマンド】で cache/log を確認（当日再生成は通常不可）。"
     ),
     "race_day_stop_finalize_logs": (
         "20:00 の race_day_stop / finalize が未実行の疑い。"
-        "サーバーで race_day_stop_hwm.sh と finalize スクリプトの有無・crontab・"
-        "実行ログを確認し、必要なら手動実行後に logs/race_day_stop_*.log / "
-        "race_day_finalize_*.log を見る。"
+        "下の【手動修正コマンド】をサーバーでコピペ実行。"
     ),
     "automation_stopped": (
-        "sudo systemctl stop yokuum-server-automation-x.service を実行し、"
-        "systemctl is-active で inactive を確認。"
-        "YOKUMAKUN_SUDO_PASS 未設定や unit 名違いがないかも確認。"
+        "21時時点で automation が動いたまま。下の【手動修正コマンド】で stop。"
     ),
     "no_stuck_workers": (
-        "pgrep -af 'pre_race_auto_predict_worker|morning_bulk_server_worker|"
-        "graded_auto_predict_worker' で残留を確認し、該当 python worker のみ "
-        "pkill -f で停止。止まらない場合は PID を特定して kill。"
+        "予想ワーカー残留。下の【手動修正コマンド】で pkill。"
     ),
     "admin_health": (
-        "sudo systemctl status/restart yokuum-admin-panel.service を実行し、"
-        "curl -sS http://127.0.0.1:8791/health を確認。"
-        "起動失敗時は journalctl -u yokuum-admin-panel.service -n 100 を見る。"
+        "admin panel 到達失敗。下の【手動修正コマンド】で restart + health 確認。"
     ),
     "publish_patches": (
-        "LAN publish ツールを再配置し、"
-        "python3 patch_pre_race_publish_on_success.py /opt/yokuumakun_auto-x と "
-        "python3 patch_worker_publish_on_success.py /opt/yokuumakun_auto-x を実行。"
-        "pre_race / morning_bulk worker に publish ブロックがあるか確認。"
+        "公開パッチ不足。下の【手動修正コマンド】で patch 再適用。"
     ),
     "publish_watch_timer": (
-        "python3 install_daily_publish_watch.py /opt/yokuumakun_auto-x を実行し、"
-        "systemctl is-enabled yokuum-morning-publish-watch.timer が enabled か確認。"
+        "publish-watch.timer 無効。下の【手動修正コマンド】で install/enable。"
     ),
     "eod_snapshot_state": (
-        "race_day_finalize 未実行の疑い。finalize スクリプトを手動実行し、"
-        "公開 latest.json が cleared/空、または当日アーカイブ "
-        "snapshots/YYYY-MM-DD.json があることを確認。"
+        "latest 未クリア（公開終了していない）。"
+        "下の【手動修正コマンド】で stop + clear_latest を実行。"
     ),
     "daytime_publish_evidence": (
-        "当日中の公開更新痕跡が無い。admin_api.json / force_publish_last.json / "
-        "logs/server_automation_debug.jsonl の publish 行を確認。"
-        "恒久対策として publish パッチと morning-publish-watch.timer を再導入。"
+        "当日中の公開更新痕跡が無い。下の【手動修正コマンド】で確認・publish 系再導入。"
     ),
     "pdf_holmes_sample": (
-        "公開 PDF のホームズ指数欄が空/欠落。"
-        "PDF 生成側のホームズ埋め込みパッチ適用状況と、該当レースの "
-        "holmes_index 元データを確認し、必要なら再 publish。"
+        "公開 PDF のホームズ指数欄が空/欠落。下の【手動修正コマンド】で確認・再 publish。"
     ),
     "netkeiba_light": (
-        "netkeiba 到達失敗。サーバーからの DNS/HTTPS/ egress を確認 "
-        "(curl -I https://race.netkeiba.com/top/)。"
-        "一時障害なら様子見、継続ならプロキシ/FW を点検。"
+        "netkeiba 到達失敗。下の【手動修正コマンド】で疎通確認。"
     ),
 }
+
+# サーバーでそのままコピペ実行できるコマンド（チェック単位）
+MANUAL_FIX_COMMANDS_BY_CHECK: dict[str, str] = {
+    "automation_stopped": """\
+# [automation_stopped] automation を止める
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+# export YOKUMAKUN_SUDO_PASS='…'   # 必要なら
+echo "${YOKUMAKUN_SUDO_PASS:-}" | sudo -S -p '' systemctl stop yokuum-server-automation-x.service
+systemctl is-active yokuum-server-automation-x.service""",
+    "no_stuck_workers": """\
+# [no_stuck_workers] 残留ワーカー停止
+pgrep -af 'pre_race_auto_predict_worker|morning_bulk_server_worker|graded_auto_predict_worker' || true
+pkill -f 'pre_race_auto_predict_worker\\.py|morning_bulk_server_worker\\.py|graded_auto_predict_worker\\.py' || true
+sleep 2
+pgrep -af 'pre_race_auto_predict_worker|morning_bulk_server_worker|graded_auto_predict_worker' || echo 'workers cleared'""",
+    "admin_health": """\
+# [admin_health] admin panel 再起動
+echo "${YOKUMAKUN_SUDO_PASS:-}" | sudo -S -p '' systemctl restart yokuum-admin-panel.service
+sleep 3
+curl -sS http://127.0.0.1:8791/health || true
+journalctl -u yokuum-admin-panel.service -n 50 --no-pager || true""",
+    "race_day_stop_finalize_logs": """\
+# [race_day_stop_finalize_logs] 20:00 stop/finalize を手動実行
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+export TZ=Asia/Tokyo
+# export YOKUMAKUN_SUDO_PASS='…'
+STOP="$YOKUMAKUN_ROOT/server_deployment/race_day_stop_hwm.sh"
+[[ -f "$STOP" ]] || STOP="$YOKUMAKUN_ROOT/race_day_stop_hwm.sh"
+bash "$STOP"
+ls -lt "$YOKUMAKUN_ROOT"/logs/race_day_stop_*.log "$YOKUMAKUN_ROOT"/logs/race_day_finalize_*.log 2>/dev/null | head -5""",
+    "eod_snapshot_state": """\
+# [eod_snapshot_state] 公開 latest を終了表示へクリア
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+export TZ=Asia/Tokyo
+# export YOKUMAKUN_SUDO_PASS='…'
+STOP="$YOKUMAKUN_ROOT/server_deployment/race_day_stop_hwm.sh"
+[[ -f "$STOP" ]] || STOP="$YOKUMAKUN_ROOT/race_day_stop_hwm.sh"
+[[ -f "$STOP" ]] && bash "$STOP" || true
+cd "$YOKUMAKUN_ROOT"
+[[ -f clear_latest_public_snapshot.py ]] && .venv/bin/python clear_latest_public_snapshot.py
+curl -fsSL 'https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json' | python3 -c 'import json,sys; d=json.load(sys.stdin); print("cleared=",d.get("cleared"),"race_count=",d.get("race_count"),"updated_at=",d.get("updated_at"))'""",
+    "publish_patches": """\
+# [publish_patches] 公開パッチ再適用
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+cd "$YOKUMAKUN_ROOT"
+.venv/bin/python patch_pre_race_publish_on_success.py "$YOKUMAKUN_ROOT" || python3 patch_pre_race_publish_on_success.py "$YOKUMAKUN_ROOT"
+.venv/bin/python patch_worker_publish_on_success.py "$YOKUMAKUN_ROOT" || python3 patch_worker_publish_on_success.py "$YOKUMAKUN_ROOT"
+grep -n 'BEGIN pre_race_publish_on_success' pre_race_auto_predict_worker.py | head
+grep -nE 'BEGIN morning_bulk_publish_on_success|run_publish' morning_bulk_server_worker.py | head""",
+    "publish_watch_timer": """\
+# [publish_watch_timer] publish-watch timer 有効化
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+# export YOKUMAKUN_SUDO_PASS='…'
+cd "$YOKUMAKUN_ROOT"
+.venv/bin/python install_daily_publish_watch.py "$YOKUMAKUN_ROOT" || python3 install_daily_publish_watch.py "$YOKUMAKUN_ROOT"
+systemctl is-enabled yokuum-morning-publish-watch.timer
+systemctl list-timers yokuum-morning-publish-watch.timer --no-pager || true""",
+    "morning_bulk_cache": """\
+# [morning_bulk_cache] 当日 cache 確認（再生成は通常不可・翌朝対策）
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+DAY=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+YMD=$(TZ=Asia/Tokyo date +%Y%m%d)
+ls -lt "$YOKUMAKUN_ROOT"/logs/morning_bulk_races_${YMD}.pkl "$YOKUMAKUN_ROOT"/logs/morning_bulk_done_*${DAY}* 2>/dev/null || true
+ls -lt "$YOKUMAKUN_ROOT"/logs/morning_bulk_*.log 2>/dev/null | head -5
+crontab -l 2>/dev/null | grep -E 'race_day_start|morning_bulk' || true""",
+    "daytime_publish_evidence": """\
+# [daytime_publish_evidence] 公開痕跡確認 + publish 系再導入
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+curl -fsSL 'https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/admin_api.json' | python3 -m json.tool | head -40
+curl -fsSL 'https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/ops/force_publish_last.json' | python3 -m json.tool | head -40
+cd "$YOKUMAKUN_ROOT"
+.venv/bin/python install_daily_publish_watch.py "$YOKUMAKUN_ROOT" || true""",
+    "pdf_holmes_sample": """\
+# [pdf_holmes_sample] 公開PDFホームズ確認（必要なら再publish）
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+curl -fsSL 'https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json' | python3 -c 'import json,sys; d=json.load(sys.stdin); rs=[r for v in d.get("venues") or [] for r in v.get("races") or [] if r.get("pdf_url")]; print("pdf_n",len(rs)); print((rs[0].get("pdf_url"), rs[0].get("holmes_index")) if rs else "no pdf")'
+# cd "$YOKUMAKUN_ROOT" && .venv/bin/python force_publish_public_snapshot.py""",
+    "netkeiba_light": """\
+# [netkeiba_light] netkeiba 疎通
+curl -sS -I --max-time 20 'https://race.netkeiba.com/top/' | head -15
+curl -sS -I --max-time 20 "https://race.netkeiba.com/top/race_list_sub.html?kaisai_date=$(TZ=Asia/Tokyo date +%Y%m%d)" | head -15
+getent hosts race.netkeiba.com || true""",
+    "deadline": """\
+# [deadline] 予算超過の再実行（検査のみ）
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+cd "$YOKUMAKUN_ROOT"
+.venv/bin/python server_deployment/race_day_evening_functional_test.py --force --budget-sec=1800 --no-autofix""",
+}
+
+# EOD 系が残ったときの一括コピペ（stop + clear + 20:00恒久化）
+MANUAL_FIX_EOD_BUNDLE = """\
+# ===== 一括: 20時停止 + 公開クリア + 次回以降の自動停止 =====
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+export YOKUMAKUN_SUDO_PASS='…'   # ← sudo パスワードを入れる
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-day-eod-jst-stop-guard-19c2/tools/yokuumakun_race_day_eod_stop/bootstrap_on_server.sh | bash
+# 確認
+systemctl is-active yokuum-server-automation-x.service
+systemctl is-enabled yokuum-race-day-stop.timer
+curl -fsSL 'https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("cleared"), d.get("race_count"), d.get("updated_at"))'
+"""
+
+_EOD_RELATED_CHECKS = frozenset(
+    {
+        "automation_stopped",
+        "race_day_stop_finalize_logs",
+        "eod_snapshot_state",
+        "no_stuck_workers",
+    }
+)
 
 
 @dataclass
@@ -1121,6 +1210,49 @@ def collect_unresolved_remediations(suite: SuiteResult) -> list[tuple[str, str, 
     return items
 
 
+def build_manual_fix_commands(suite: SuiteResult) -> str:
+    """残存不具合向けのコピペ用シェルコマンド全文。"""
+    names: list[str] = []
+    for cr in suite.checks:
+        if cr.ok or cr.detail == "skipped_low_budget":
+            continue
+        if cr.name not in names:
+            names.append(cr.name)
+    if suite.timed_out and "deadline" not in names:
+        names.append("deadline")
+    if not names:
+        return ""
+
+    parts: list[str] = [
+        "# サーバー (tn@192.168.128.178) で実行。必要なら先に:",
+        "# export YOKUMAKUN_SUDO_PASS='…'",
+        "",
+    ]
+    if any(n in _EOD_RELATED_CHECKS for n in names):
+        parts.append(MANUAL_FIX_EOD_BUNDLE.rstrip())
+        parts.append("")
+    for name in names:
+        cmd = MANUAL_FIX_COMMANDS_BY_CHECK.get(name)
+        if not cmd:
+            continue
+        parts.append(cmd.rstrip())
+        parts.append("")
+    return "\n".join(parts).strip()[:3900]
+
+
+def build_manual_fix_embed(suite: SuiteResult) -> dict[str, Any] | None:
+    body = build_manual_fix_commands(suite)
+    if not body:
+        return None
+    # Discord で選択しやすいようコードブロック化
+    desc = "サーバーへ SSH 後、下をそのまま貼り付けて実行してください。\n```bash\n" + body + "\n```"
+    return {
+        "title": "【手動修正コマンド】コピペ用",
+        "description": desc[:3900],
+        "color": 0xE67E22,
+    }
+
+
 def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     """returns title, description, color"""
     if suite.skipped:
@@ -1193,6 +1325,11 @@ def build_report(suite: SuiteResult) -> tuple[str, str, int]:
         for name, status, advice in remediations:
             lines.append(f"- {name} [{status}]")
             lines.append(f"  → {advice}")
+        if build_manual_fix_commands(suite):
+            lines.append("")
+            lines.append(
+                "👉 コピペ用コマンドは続く embed「【手動修正コマンド】」にまとめています。"
+            )
 
     if suite.overall_ok and not bugs:
         lines.append("")
@@ -1333,15 +1470,19 @@ def run_suite(
     suite.overall_ok = (not suite.bugs) and (not suite.timed_out)
 
     title, desc, color = build_report(suite)
-    embed = [{"title": title, "description": desc, "color": color}]
+    embeds: list[dict[str, Any]] = [{"title": title, "description": desc, "color": color}]
+    cmd_embed = build_manual_fix_embed(suite)
+    if cmd_embed and (not suite.overall_ok or suite.bugs or suite.warnings):
+        embeds.append(cmd_embed)
     has_errors = _report_has_errors(suite)
+    manual_cmds = build_manual_fix_commands(suite) if cmd_embed else ""
 
     webhook = _test_webhook_url()
     if webhook:
         wh = _post_discord_webhook(
             webhook,
             content="開催日夕の機能テスト結果です",
-            embeds=embed,
+            embeds=embeds,
         )
     else:
         _notify_ops_fallback(
@@ -1351,17 +1492,28 @@ def run_suite(
         wh = {"ok": False, "error": "webhook_not_configured"}
 
     # 不具合エラーを含む報告はエラー通知 webhook にも送る
+    # （手動修正コマンド embed も同梱。長い場合は続けてコマンド本文も送る）
     wh_err: dict[str, Any] = {"ok": False, "skipped": True, "reason": "no_errors"}
     if has_errors:
         err_hook = _error_webhook_url()
+        err_content = "開催日夕の機能テスト: 不具合あり（エラー通知）"
+        if manual_cmds:
+            err_content = (
+                "開催日夕の機能テスト: 不具合あり（エラー通知）\n"
+                "手動修正は embed「【手動修正コマンド】」をコピペしてください。"
+            )
         if err_hook and err_hook == webhook:
             wh_err = {"ok": True, "skipped": True, "reason": "same_as_test_webhook"}
         elif err_hook:
             wh_err = _post_discord_webhook(
                 err_hook,
-                content="開催日夕の機能テスト: 不具合あり（エラー通知）",
-                embeds=embed,
+                content=err_content[:1900],
+                embeds=embeds,
             )
+            # embed が長い場合の保険: コマンド本文を別メッセージでも送る
+            if manual_cmds and wh_err.get("ok"):
+                cmd_msg = "【手動修正コマンド（コピペ用）】\n```bash\n" + manual_cmds[:1800] + "\n```"
+                _post_discord_webhook(err_hook, content=cmd_msg[:1900], embeds=None)
         else:
             # 専用 URL が無い場合は ops の error 経路へ（failure チャンネル想定）
             _notify_ops_fallback("error", desc.replace("\n", " | ")[:300])
