@@ -8,8 +8,10 @@
   - 破壊的操作（再予想・Selenium一斉）はしない。読み取り＋軽い到達確認のみ。
 
 通知先（優先順）:
-  DISCORD_WEBHOOK_TEST / ADMIN_TEST_WEBHOOK_URL / HWM_DISCORD_WEBHOOK_TEST /
-  DISCORD_TEST_WEBHOOK_URL / DISCORD_WEBHOOK_TEST_ALWAYS
+  テスト: DISCORD_WEBHOOK_TEST / ADMIN_TEST_WEBHOOK_URL / HWM_DISCORD_WEBHOOK_TEST /
+          DISCORD_TEST_WEBHOOK_URL / DISCORD_WEBHOOK_TEST_ALWAYS
+  不具合あり時はエラー通知にも送る:
+          DISCORD_WEBHOOK_FAILURE / DISCORD_WEBHOOK_ERROR / DISCORD_WEBHOOK_URL_3 など
   未設定時は ops_discord_notify.notify_action にフォールバック
 """
 
@@ -103,19 +105,51 @@ def _today_ymd() -> str:
     return datetime.now(_JST).strftime("%Y%m%d")
 
 
-def _test_webhook_url() -> str:
-    for key in (
-        "DISCORD_WEBHOOK_TEST",
-        "ADMIN_TEST_WEBHOOK_URL",
-        "HWM_DISCORD_WEBHOOK_TEST",
-        "DISCORD_TEST_WEBHOOK_URL",
-        "DISCORD_WEBHOOK_TEST_ALWAYS",
-        "HWM_DISCORD_WEBHOOK_TEST_ALWAYS",
-    ):
+def _env_webhook(keys: tuple[str, ...]) -> str:
+    for key in keys:
         v = (os.environ.get(key) or "").strip().strip('"')
         if v.startswith("http"):
             return v
     return ""
+
+
+def _test_webhook_url() -> str:
+    return _env_webhook(
+        (
+            "DISCORD_WEBHOOK_TEST",
+            "ADMIN_TEST_WEBHOOK_URL",
+            "HWM_DISCORD_WEBHOOK_TEST",
+            "DISCORD_TEST_WEBHOOK_URL",
+            "DISCORD_WEBHOOK_TEST_ALWAYS",
+            "HWM_DISCORD_WEBHOOK_TEST_ALWAYS",
+        )
+    )
+
+
+def _error_webhook_url() -> str:
+    """エラー通知（failure）用 webhook。サーバー .env の FAILURE / URL_3 を優先。"""
+    return _env_webhook(
+        (
+            "DISCORD_WEBHOOK_FAILURE",
+            "HWM_DISCORD_WEBHOOK_FAILURE",
+            "DISCORD_WEBHOOK_ERROR",
+            "HWM_DISCORD_WEBHOOK_ERROR",
+            "DISCORD_ERROR_WEBHOOK_URL",
+            "ADMIN_ERROR_WEBHOOK_URL",
+            "DISCORD_WEBHOOK_URL_3",
+        )
+    )
+
+
+def _report_has_errors(suite: SuiteResult) -> bool:
+    """不具合エラーを含む報告か（警告のみは含めない）。"""
+    if suite.skipped:
+        return False
+    if suite.timed_out:
+        return True
+    if suite.bugs:
+        return True
+    return not suite.overall_ok
 
 
 def _post_discord_webhook(
@@ -696,12 +730,15 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
     suite.overall_ok = (not suite.bugs) and (not suite.timed_out)
 
     title, desc, color = build_report(suite)
+    embed = [{"title": title, "description": desc, "color": color}]
+    has_errors = _report_has_errors(suite)
+
     webhook = _test_webhook_url()
     if webhook:
         wh = _post_discord_webhook(
             webhook,
             content="開催日夕の機能テスト結果です",
-            embeds=[{"title": title, "description": desc, "color": color}],
+            embeds=embed,
         )
     else:
         _notify_ops_fallback(
@@ -709,6 +746,23 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
             desc.replace("\n", " | ")[:300],
         )
         wh = {"ok": False, "error": "webhook_not_configured"}
+
+    # 不具合エラーを含む報告はエラー通知 webhook にも送る
+    wh_err: dict[str, Any] = {"ok": False, "skipped": True, "reason": "no_errors"}
+    if has_errors:
+        err_hook = _error_webhook_url()
+        if err_hook and err_hook == webhook:
+            wh_err = {"ok": True, "skipped": True, "reason": "same_as_test_webhook"}
+        elif err_hook:
+            wh_err = _post_discord_webhook(
+                err_hook,
+                content="開催日夕の機能テスト: 不具合あり（エラー通知）",
+                embeds=embed,
+            )
+        else:
+            # 専用 URL が無い場合は ops の error 経路へ（failure チャンネル想定）
+            _notify_ops_fallback("error", desc.replace("\n", " | ")[:300])
+            wh_err = {"ok": False, "error": "error_webhook_not_configured", "ops_fallback": True}
 
     # 二重に ops へも要約（TEST_ALWAYS 経由でテストチャンネルに乗る構成向け）
     try:
@@ -732,10 +786,12 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
                     "day": suite.day,
                     "overall_ok": suite.overall_ok,
                     "timed_out": suite.timed_out,
+                    "has_errors": has_errors,
                     "bugs": suite.bugs,
                     "warnings": suite.warnings,
                     "checks": [c.__dict__ for c in suite.checks],
                     "webhook": wh,
+                    "error_webhook": wh_err,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -750,11 +806,14 @@ def run_suite(*, budget_sec: int | None = None, force: bool = False) -> dict[str
         "skipped": False,
         "day": day,
         "timed_out": suite.timed_out,
+        "has_errors": has_errors,
         "bugs": suite.bugs,
         "warnings": suite.warnings,
         "checks": [c.__dict__ for c in suite.checks],
         "webhook": wh,
         "webhook_configured": bool(webhook),
+        "error_webhook": wh_err,
+        "error_webhook_configured": bool(_error_webhook_url()),
         "report": desc,
         "log": str(fp) if fp else "",
         "elapsed_sec": int((datetime.now(_JST) - started).total_seconds()),

@@ -10,7 +10,9 @@ from unittest import mock
 from race_day_evening_functional_test import (
     CheckResult,
     SuiteResult,
+    _error_webhook_url,
     _is_race_day,
+    _report_has_errors,
     build_report,
 )
 
@@ -99,6 +101,45 @@ class ReportTests(unittest.TestCase):
         title, desc, _ = build_report(suite)
         self.assertIn("スキップ", title)
         self.assertIn("開催日ではない", desc)
+
+
+class ErrorWebhookRoutingTests(unittest.TestCase):
+    def test_report_has_errors_on_bugs(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-01",
+            started_at="t0",
+            overall_ok=False,
+            bugs=["x"],
+        )
+        self.assertTrue(_report_has_errors(suite))
+
+    def test_report_has_errors_false_when_ok(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-01",
+            started_at="t0",
+            overall_ok=True,
+        )
+        self.assertFalse(_report_has_errors(suite))
+
+    def test_skip_is_not_error_report(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-03",
+            started_at="t0",
+            skipped=True,
+            overall_ok=True,
+        )
+        self.assertFalse(_report_has_errors(suite))
+
+    def test_error_webhook_prefers_failure_env(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "DISCORD_WEBHOOK_FAILURE": "https://example.test/failure",
+                "DISCORD_WEBHOOK_URL_3": "https://example.test/url3",
+            },
+            clear=False,
+        ):
+            self.assertEqual(_error_webhook_url(), "https://example.test/failure")
 
 
 if __name__ == "__main__":

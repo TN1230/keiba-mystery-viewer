@@ -27,7 +27,7 @@
 
 ## 通知先
 
-優先順:
+**テスト webhook**（常に結果を送る）優先順:
 
 1. `DISCORD_WEBHOOK_TEST`
 2. `ADMIN_TEST_WEBHOOK_URL`
@@ -35,6 +35,15 @@
 4. `DISCORD_TEST_WEBHOOK_URL`
 5. `DISCORD_WEBHOOK_TEST_ALWAYS` / `HWM_DISCORD_WEBHOOK_TEST_ALWAYS`
 
+**エラー通知 webhook**（不具合あり / タイムアウト時のみ追加送信）:
+
+1. `DISCORD_WEBHOOK_FAILURE`
+2. `HWM_DISCORD_WEBHOOK_FAILURE`
+3. `DISCORD_WEBHOOK_ERROR` / `HWM_DISCORD_WEBHOOK_ERROR`
+4. `DISCORD_ERROR_WEBHOOK_URL` / `ADMIN_ERROR_WEBHOOK_URL`
+5. `DISCORD_WEBHOOK_URL_3`（サーバー .env の failure チャンネル）
+
+テスト webhook と同一 URL の場合は二重送信しません。  
 未設定時は `ops_discord_notify.notify_action` にフォールバックします。
 
 ## サーバーへの導入
