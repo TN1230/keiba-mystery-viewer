@@ -168,18 +168,37 @@
   }
 
   function matrixSuiLabel(raw) {
-    const s = String(raw || "").trim();
-    if (!s || s === "-") return "-";
+    const s0 = String(raw || "").trim();
+    if (!s0 || s0 === "-") return "-";
+    // 括弧付き説明を落として短名に（ホプキンス（新馬戦特化）→ホプキンス）
+    let s = s0.split("（")[0].split("(")[0].trim() || s0;
     const map = {
       ワ: "ワトソン",
+      watson: "ワトソン",
+      ワトソン: "ワトソン",
       アイ: "アイリーン",
+      irene: "アイリーン",
+      アイリーン: "アイリーン",
       モ: "モーリアティ",
       モリ: "モーリアティ",
+      moriarty: "モーリアティ",
+      モーリアティ: "モーリアティ",
       ハ: "ハンター",
+      hunter: "ハンター",
+      ハンター: "ハンター",
       ホプ: "ホプキンス",
+      hopkins: "ホプキンス",
+      hope: "ホプキンス",
+      ホプキンス: "ホプキンス",
       "ハ/ホプ": "ハンター",
     };
-    return map[s] || s;
+    if (map[s]) return map[s];
+    if (s.includes("ホプ")) return "ホプキンス";
+    if (s.includes("モーリ")) return "モーリアティ";
+    if (s.includes("ワトソン")) return "ワトソン";
+    if (s.includes("アイリー") || s === "アイ") return "アイリーン";
+    if (s.includes("ハンター")) return "ハンター";
+    return map[s0] || s;
   }
 
   function thirdDetectiveLabel(row) {
@@ -381,6 +400,39 @@
     return "mark-honmei mark-h";
   }
 
+  function formatBataijuDisplay(v) {
+    if (v == null || v === "") return "";
+    const s = String(v).trim();
+    if (!s) return "";
+    if (/^-?\d+(?:\.\d+)?$/.test(s)) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return String(Math.round(n));
+      return s;
+    }
+    const m = s.match(/^(-?\d+(?:\.\d+)?)(.*)$/);
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n)) return String(Math.round(n)) + m[2];
+    }
+    return s;
+  }
+
+  function formatKinryoDisplay(v) {
+    // 0.5kg 端数なしは整数、0.5 は小数1桁（57.0→57, 55.5→55.5）
+    if (v == null || v === "") return "";
+    const s = String(v).trim();
+    if (!s) return "";
+    const n = Number(s);
+    if (!Number.isFinite(n)) return s;
+    const half = Math.round(n * 2) / 2;
+    if (Math.abs(n - half) > 1e-6) {
+      if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n));
+      return String(n);
+    }
+    if (Math.abs(half - Math.round(half)) < 1e-6) return String(Math.round(half));
+    return half.toFixed(1);
+  }
+
   function shutubaRowsForDisplay(rows) {
     const list = Array.isArray(rows) ? rows.slice() : [];
     if (state.shutubaSort !== "umaban") return list;
@@ -429,7 +481,10 @@
         if (st.cancel && (c === "馬名" || c === "単勝")) classes.push("cancel-text");
         if (markCols.has(c) && honmei[c]) classes.push(markHonmeiClass(c));
         const cls = classes.length ? ` class="${classes.join(" ")}"` : "";
-        html += `<td${cls}${styleAttr}>${escapeHtml(row[c] ?? "")}</td>`;
+        let cellVal = row[c] ?? "";
+        if (c === "馬体重") cellVal = formatBataijuDisplay(cellVal);
+        if (c === "斤量") cellVal = formatKinryoDisplay(cellVal);
+        html += `<td${cls}${styleAttr}>${escapeHtml(cellVal)}</td>`;
       }
       html += "</tr>";
     }
