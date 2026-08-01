@@ -381,6 +381,8 @@
   function makeJumpButton(r, { nearestId } = {}) {
     const b = document.createElement("button");
     b.type = "button";
+    b.setAttribute("data-rid", String(r.race_id || ""));
+    b.setAttribute("data-place", String(r.place || ""));
     const selected = String(r.race_id) === String(state.raceId);
     const nearest = nearestId != null && String(r.race_id) === String(nearestId);
     let cls = jumpClass(r.holmes_index_rank);
@@ -396,6 +398,42 @@
     b.title = tip;
     b.addEventListener("click", () => selectRace(r.race_id, r.place, { scroll: false }));
     return b;
+  }
+
+  /** 選択状態だけ更新（発走表スクロール位置を維持） */
+  function syncJumpSelection() {
+    const rid = String(state.raceId || "");
+    const place = String(state.place || "");
+    document.querySelectorAll(".jump[data-rid]").forEach((b) => {
+      const selected = String(b.getAttribute("data-rid") || "") === rid;
+      b.classList.toggle("is-selected", selected);
+      b.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+    document.querySelectorAll(".jump-scoreboard-place").forEach((th) => {
+      th.classList.toggle("is-active-place", th.textContent === place);
+    });
+  }
+
+  function captureJumpScrollPositions() {
+    const out = new Map();
+    for (const id of ["jumpButtons", "jumpButtonsSidebar"]) {
+      const el = $(id);
+      if (!el) continue;
+      const sc = el.querySelector(".jump-timeline-scroll");
+      if (sc) out.set(id, { top: sc.scrollTop, left: sc.scrollLeft });
+    }
+    return out;
+  }
+
+  function restoreJumpScrollPositions(saved) {
+    if (!saved || !saved.size) return;
+    for (const [id, pos] of saved) {
+      const el = $(id);
+      const sc = el && el.querySelector(".jump-timeline-scroll");
+      if (!sc || !pos) continue;
+      sc.scrollTop = pos.top;
+      sc.scrollLeft = pos.left;
+    }
   }
 
   function renderJumpsVenue(box, { sidebar }) {
@@ -511,6 +549,7 @@
 
   function renderJumps() {
     syncJumpLayoutControls();
+    const savedScroll = captureJumpScrollPositions();
     const targets = [
       { el: $("jumpButtons"), sidebar: false },
       { el: $("jumpButtonsSidebar"), sidebar: true },
@@ -521,6 +560,8 @@
       if (timeline) renderJumpsTimeline(el, { sidebar });
       else renderJumpsVenue(el, { sidebar });
     }
+    // 再描画で .jump-timeline-scroll が作り直されても位置を戻す
+    restoreJumpScrollPositions(savedScroll);
   }
 
   function initJumpLayoutControls() {
@@ -537,7 +578,8 @@
     if (place) state.place = place;
     renderTabs();
     renderMatrix();
-    renderJumps();
+    // 発走表ボタン欄は全再描画せず選択だけ更新（スクロール位置ジャンプ防止）
+    syncJumpSelection();
     renderDetail();
     renderShutuba();
     openAccordion("race");
