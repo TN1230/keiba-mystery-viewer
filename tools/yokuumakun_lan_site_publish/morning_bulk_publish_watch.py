@@ -384,10 +384,29 @@ def main() -> int:
     from force_publish_public_snapshot import run_publish
 
     result = run_publish(force=True)
-    out["result"] = result
-    # hwm が偽成功しても standalone まで落ちるよう force_publish 側で不合格化済み
+    # 巨大・循環しうる attempts/notes は要約だけ残す
+    if isinstance(result, dict):
+        slim = {
+            k: result.get(k)
+            for k in (
+                "ok",
+                "via",
+                "error",
+                "race_count",
+                "schedule_date",
+                "cache_reflect",
+                "n_races_cache",
+            )
+            if k in result
+        }
+        errs = result.get("export_errors") or result.get("errors")
+        if errs:
+            slim["errors"] = list(errs)[:8]
+        out["result"] = slim
+    else:
+        out["result"] = {"raw": str(result)[:500]}
     print(json.dumps(out, ensure_ascii=False, default=str))
-    return 0 if result.get("ok") else 1
+    return 0 if isinstance(result, dict) and result.get("ok") else 1
 
 
 if __name__ == "__main__":

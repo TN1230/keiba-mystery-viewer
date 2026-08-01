@@ -480,9 +480,10 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
         if out.get("ok"):
             notes.append(str(_upload_diag(out)))
             return out
-        attempts.append(dict(out))
+        # attempts を含めない浅いコピー（循環参照防止）
+        attempts.append({k: v for k, v in out.items() if k != "attempts"})
         errors.append(str(out.get("error") or "hwm_failed"))
-        notes.append(str(_upload_diag(dict(out))))
+        notes.append(str(_upload_diag({k: v for k, v in out.items() if k != "attempts"})))
     except Exception as e:
         errors.append(f"hwm: {type(e).__name__}: {e}")
         attempts.append({"ok": False, "error": errors[-1]})
