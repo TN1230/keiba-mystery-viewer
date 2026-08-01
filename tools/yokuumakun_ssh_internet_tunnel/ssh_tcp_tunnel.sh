@@ -8,6 +8,7 @@ ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
 LOG_DIR="${ROOT}/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/ssh_tcp_tunnel.log"
+ENDPOINT_FILE="${LOG_DIR}/ssh_endpoint.local.json"
 BIN_DIR="${ROOT}/.local/bin"
 BORE_BIN="${BORE_BIN:-${BIN_DIR}/bore}"
 BORE_TO="${BORE_TO:-bore.pub}"
@@ -42,17 +43,57 @@ install_bore() {
   log "INFO: installed $BORE_BIN"
 }
 
+notify_discord() {
+  local host="$1" port="$2"
+  local webhook="" webhook_line=""
+  if [[ -f "${ROOT}/.env" ]]; then
+    webhook_line="$(grep -E '^(DISCORD_WEBHOOK_TEST_ALWAYS|DISCORD_WEBHOOK_OPS)=' "${ROOT}/.env" | head -1 || true)"
+    if [[ -n "$webhook_line" ]]; then
+      webhook="${webhook_line#*=}"
+      webhook="$(printf '%s' "$webhook" | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+    fi
+  fi
+  if [[ -z "$webhook" ]]; then
+    return 0
+  fi
+  local content payload
+  content="SSH tunnel up: ssh -p ${port} ${SSH_USER}@${host} (bore)"
+  payload="$(python3 -c 'import json,sys; print(json.dumps({"content": sys.argv[1]}))' "$content")"
+  curl -fsS -X POST -H 'Content-Type: application/json' -d "$payload" \
+    "$webhook" >/dev/null 2>&1 || log "WARN: discord notify failed"
+}
+
+write_local_endpoint() {
+  local host="$1" port="$2"
+  cat >"$ENDPOINT_FILE" <<EOF
+{
+  "host": "${host}",
+  "port": ${port},
+  "user": "${SSH_USER}",
+  "provider": "bore",
+  "ssh_command": "ssh -p ${port} ${SSH_USER}@${host}",
+  "updated_at": "$(date -Iseconds)"
+}
+EOF
+  log "LOCAL_ENDPOINT $ENDPOINT_FILE"
+  # 画面/journal にも必ず出す（curl|bash の確認用）
+  echo "SSH_ENDPOINT_READY host=${host} port=${port} user=${SSH_USER}"
+  echo "SSH_COMMAND: ssh -p ${port} ${SSH_USER}@${host}"
+}
+
 publish_endpoint() {
   local host="$1" port="$2"
+  write_local_endpoint "$host" "$port"
+  notify_discord "$host" "$port"
   if [[ ! -f "$PUBLISH_PY" ]]; then
-    log "WARN: missing $PUBLISH_PY (skip publish)"
+    log "WARN: missing $PUBLISH_PY (skip supabase publish)"
     return 0
   fi
   if [[ ! -x "$PY" ]]; then
     PY="$(command -v python3 || true)"
   fi
   if [[ -z "${PY:-}" ]]; then
-    log "WARN: python3 not found (skip publish)"
+    log "WARN: python3 not found (skip supabase publish)"
     return 0
   fi
   set +e
@@ -62,28 +103,55 @@ publish_endpoint() {
   log "publish rc=$rc $out"
 }
 
+extract_endpoint() {
+  # bore / 派生の表記ゆれを吸収
+  local line="$1"
+  if [[ "$line" =~ [Ll]istening[[:space:]]+(at|on)[[:space:]]+([A-Za-z0-9._-]+):([0-9]{2,5}) ]]; then
+    echo "${BASH_REMATCH[2]} ${BASH_REMATCH[3]}"
+    return 0
+  fi
+  if [[ "$line" =~ ([A-Za-z0-9._-]*bore[A-Za-z0-9._-]*):([0-9]{2,5}) ]]; then
+    echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    return 0
+  fi
+  return 1
+}
+
 install_bore
 log "START ssh_tcp_tunnel bore=$BORE_BIN to=$BORE_TO local=127.0.0.1:22"
 
-run_bore() {
-  if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL "$BORE_BIN" local 22 --to "$BORE_TO"
-  else
-    "$BORE_BIN" local 22 --to "$BORE_TO"
+# pipe サブシェルを避け、FIFO で読む（publish を確実に親で実行）
+fifo="$(mktemp -u)"
+mkfifo "$fifo"
+bore_pid=""
+cleanup_fifo() {
+  if [[ -n "${bore_pid:-}" ]] && kill -0 "$bore_pid" 2>/dev/null; then
+    kill "$bore_pid" 2>/dev/null || true
   fi
+  rm -f "$fifo"
 }
+trap cleanup_fifo EXIT
 
-# bore は "listening at bore.pub:PORT" を出す
+if command -v stdbuf >/dev/null 2>&1; then
+  stdbuf -oL -eL "$BORE_BIN" local 22 --to "$BORE_TO" >"$fifo" 2>&1 &
+else
+  "$BORE_BIN" local 22 --to "$BORE_TO" >"$fifo" 2>&1 &
+fi
+bore_pid=$!
+
 published=0
-run_bore 2>&1 | tee -a "$LOG_FILE" | while IFS= read -r line; do
-  if [[ "$line" =~ [Ll]istening\ at\ ([A-Za-z0-9._-]+):([0-9]{2,5}) ]]; then
-    host="${BASH_REMATCH[1]}"
-    port="${BASH_REMATCH[2]}"
+while IFS= read -r line; do
+  echo "$line" | tee -a "$LOG_FILE" >/dev/null
+  echo "$line"
+  if ep="$(extract_endpoint "$line")"; then
+    host="${ep%% *}"
+    port="${ep##* }"
     log "ENDPOINT host=$host port=$port"
     publish_endpoint "$host" "$port"
     published=1
   fi
-done
+done <"$fifo"
 
-log "STOP ssh_tcp_tunnel (bore exited)"
+wait "$bore_pid" || true
+log "STOP ssh_tcp_tunnel (bore exited) published=$published"
 exit 1

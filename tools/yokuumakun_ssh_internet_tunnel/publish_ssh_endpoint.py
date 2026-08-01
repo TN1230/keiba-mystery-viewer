@@ -14,6 +14,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 try:
@@ -60,27 +61,34 @@ def publish(payload: dict) -> str:
         raise RuntimeError("SUPABASE_URL / SERVICE_ROLE_KEY missing")
 
     object_path = "ssh_endpoint.json"
-    upload_url = f"{supabase}/storage/v1/object/{bucket}/{object_path}?upsert=true"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        upload_url,
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {key}",
-            "apikey": key,
-            "Content-Type": "application/json",
-            "x-upsert": "true",
-            "User-Agent": "yokuumakun-ssh-endpoint/1",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            _ = resp.read()
-            if resp.status not in (200, 201):
-                raise RuntimeError(f"upload HTTP {resp.status}")
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"upload HTTP {e.code}: {e.read()[:400]!r}") from e
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "apikey": key,
+        "Content-Type": "application/json",
+        "x-upsert": "true",
+        "User-Agent": "yokuumakun-ssh-endpoint/1",
+    }
+    # POST+upsert → 失敗時は PUT を試す（環境差吸収）
+    last_err: Optional[Exception] = None
+    for method, url in (
+        ("POST", f"{supabase}/storage/v1/object/{bucket}/{object_path}?upsert=true"),
+        ("PUT", f"{supabase}/storage/v1/object/{bucket}/{object_path}"),
+    ):
+        req = urllib.request.Request(url, data=body, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                _ = resp.read()
+                if resp.status not in (200, 201):
+                    last_err = RuntimeError(f"upload HTTP {resp.status}")
+                    continue
+            last_err = None
+            break
+        except urllib.error.HTTPError as e:
+            last_err = RuntimeError(f"upload {method} HTTP {e.code}: {e.read()[:400]!r}")
+            continue
+    if last_err is not None:
+        raise last_err
 
     return f"{supabase}/storage/v1/object/public/{bucket}/{object_path}"
 

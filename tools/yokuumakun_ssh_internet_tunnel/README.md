@@ -9,10 +9,19 @@
 
 ## サーバーで有効化（推奨）
 
-自宅サーバー、または LAN 内端末から:
+自宅サーバー、または LAN 内端末から（**出力をそのまま保存**）:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_ssh_internet_tunnel/bootstrap_on_server.sh | bash
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_ssh_internet_tunnel/bootstrap_on_server.sh | bash | tee /tmp/ssh_tunnel_bootstrap.log
+```
+
+成功時は末尾に `DONE:` と `ssh_endpoint.json` が出ます。  
+`WARN` / `ERROR` のときは `/tmp/ssh_tunnel_bootstrap.log` と次を貼ってください:
+
+```bash
+systemctl status yokuum-ssh-tcp-tunnel --no-pager
+journalctl -u yokuum-ssh-tcp-tunnel -n 80 --no-pager
+cat /opt/yokuumakun_auto-x/logs/ssh_endpoint.local.json
 ```
 
 Windows (LAN):

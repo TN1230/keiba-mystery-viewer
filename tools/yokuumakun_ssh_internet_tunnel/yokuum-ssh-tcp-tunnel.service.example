@@ -10,7 +10,8 @@ WorkingDirectory=/opt/yokuumakun_auto-x
 Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
 Environment=TZ=Asia/Tokyo
 Environment=SSH_TUNNEL_USER=tn
-EnvironmentFile=-/opt/yokuumakun_auto-x/.env
+# .env は publish_ssh_endpoint.py が dotenv で読む。
+# systemd EnvironmentFile に渡すと .env のシェル構文で unit 起動失敗しやすいので使わない。
 ExecStart=/bin/bash /opt/yokuumakun_auto-x/server_deployment/ssh_tcp_tunnel.sh
 Restart=always
 RestartSec=8
