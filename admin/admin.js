@@ -17,6 +17,7 @@
   const sessionHint = document.getElementById("sessionHint");
   const loginBtn = document.getElementById("loginBtn");
   const btnMorningBulk = document.getElementById("btnMorningBulk");
+  const btnSshTunnel = document.getElementById("btnSshTunnel");
   const btnModemReboot = document.getElementById("btnModemReboot");
   const btnOpsLogs = document.getElementById("btnOpsLogs");
   const btnLogout = document.getElementById("btnLogout");
@@ -142,6 +143,7 @@
       admin_login: "ログイン",
       admin_logout: "ログアウト",
       admin_morning_bulk_rerun: "一斉予想再実行",
+      admin_remote_bootstrap: "リモート bootstrap",
       admin_modem_reboot: "モデム再起動",
     };
     return map[event] || event || "(不明)";
@@ -429,6 +431,56 @@
       "一斉予想を再実行します。ログアウト後もサーバー上で処理は継続します。よろしいですか？"
     );
   });
+
+  if (btnSshTunnel) {
+    btnSshTunnel.addEventListener("click", async () => {
+      const ok = window.confirm(
+        "SSH を bore.pub 経由で公開し、ssh_endpoint.json を更新します。インターネットからパスワードSSH可能になります。よろしいですか？"
+      );
+      if (!ok) return;
+      setStatus(menuStatus, "実行中…");
+      btnSshTunnel.disabled = true;
+      try {
+        const token = getToken();
+        if (!token) {
+          await forceLogout("セッションがありません。再ログインしてください。");
+          return;
+        }
+        const { res, data } = await api("/admin/remote-bootstrap", {
+          method: "POST",
+          token,
+          body: { action: "ensure_ssh_tunnel" },
+        });
+        if (res.status === 401) {
+          await forceLogout(
+            "セッションが切れました。開始済みの処理はサーバー上で継続している場合があります。再ログインしてください。"
+          );
+          return;
+        }
+        if (res.status === 404) {
+          setStatus(
+            menuStatus,
+            "remote-bootstrap 未導入です。サーバーで bootstrap_tunnel_embedded.sh を実行してください。",
+            "error"
+          );
+          return;
+        }
+        if (!res.ok || !data.ok) {
+          setStatus(
+            menuStatus,
+            data.message || data.error || "SSHトンネル公開に失敗しました",
+            "error"
+          );
+          return;
+        }
+        setStatus(menuStatus, data.message || "SSHトンネルを公開しました", "ok");
+      } catch (e) {
+        setStatus(menuStatus, e.message || String(e), "error");
+      } finally {
+        btnSshTunnel.disabled = false;
+      }
+    });
+  }
 
   btnModemReboot.addEventListener("click", () => {
     runAction(
