@@ -543,6 +543,27 @@ def _fmt_bataiju(v: Any) -> str:
     return s
 
 
+def _fmt_kinryo(v: Any) -> str:
+    """斤量: 0.5kg 端数なしは整数、0.5 は小数1桁（57.0→57, 55.5→55.5）。"""
+    if v is None or v == "":
+        return ""
+    try:
+        x = float(v)
+    except Exception:
+        return str(v).strip()
+    if x != x:
+        return ""
+    half = round(x * 2.0) / 2.0
+    if abs(x - half) > 1e-6:
+        # 想定外の端数はそのまま簡潔に
+        if abs(x - round(x)) < 1e-6:
+            return str(int(round(x)))
+        return f"{x:.1f}".rstrip("0").rstrip(".")
+    if abs(half - round(half)) < 1e-6:
+        return str(int(round(half)))
+    return f"{half:.1f}"
+
+
 def _fix_pct(v: Any) -> str:
     if v is None or v == "":
         return ""
@@ -650,7 +671,7 @@ def _build_shutuba(
             "脚質": _safe_str(kyasha),
             "単勝": _safe_str(raw.get("単勝") or pred.get("単勝")),
             "人気": _safe_str(raw.get("人気") or pred.get("人気")),
-            "斤量": _safe_str(raw.get("斤量") or pred.get("斤量")),
+            "斤量": _fmt_kinryo(raw.get("斤量") if raw.get("斤量") not in (None, "") else pred.get("斤量")),
             "性齢": _safe_str(raw.get("性齢") or pred.get("性齢")),
             "馬体重": _fmt_bataiju(raw.get("馬体重") if raw.get("馬体重") not in (None, "") else pred.get("馬体重")),
             "推定勝率": _fix_pct(win_p),

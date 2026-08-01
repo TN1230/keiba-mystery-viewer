@@ -42,6 +42,17 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertEqual(_fmt_bataiju(""), "")
         self.assertEqual(_fmt_bataiju(None), "")
 
+    def test_fmt_kinryo_half_kg(self) -> None:
+        from standalone_publish_from_cache import _fmt_kinryo
+
+        self.assertEqual(_fmt_kinryo(57.0), "57")
+        self.assertEqual(_fmt_kinryo("55.0"), "55")
+        self.assertEqual(_fmt_kinryo(55.5), "55.5")
+        self.assertEqual(_fmt_kinryo("54.5"), "54.5")
+        self.assertEqual(_fmt_kinryo(55), "55")
+        self.assertEqual(_fmt_kinryo(""), "")
+        self.assertEqual(_fmt_kinryo(None), "")
+
     def test_rejects_gate_threshold_score_25(self) -> None:
         from standalone_publish_from_cache import _extract_holmes_score
 
@@ -120,7 +131,7 @@ class StandaloneBuildTests(unittest.TestCase):
                         "脚質": "先行",
                         "単勝": 3.5,
                         "人気": 1,
-                        "斤量": 55,
+                        "斤量": 55.0,
                         "性齢": "牡2",
                         "馬体重": 450.0,
                     },
@@ -132,7 +143,7 @@ class StandaloneBuildTests(unittest.TestCase):
                         "脚質": "差し",
                         "単勝": 5.0,
                         "人気": 2,
-                        "斤量": 55,
+                        "斤量": 55.0,
                         "性齢": "牝2",
                         "馬体重": 440,
                     },
@@ -152,6 +163,7 @@ class StandaloneBuildTests(unittest.TestCase):
         # default order = higher 推定3着内率 first (馬番4)
         self.assertEqual(race["shutuba"]["rows"][0]["馬番"], "4")
         self.assertEqual(race["shutuba"]["rows"][0]["馬体重"], "450")
+        self.assertEqual(race["shutuba"]["rows"][0]["斤量"], "55")
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 

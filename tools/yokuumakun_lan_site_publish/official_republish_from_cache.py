@@ -469,8 +469,28 @@ def _fmt_bataiju_int(v: Any) -> str:
     return s
 
 
+def _fmt_kinryo_display(v: Any) -> str:
+    """斤量: 0.5kg 端数なしは整数、0.5 は小数1桁。"""
+    if v is None or v == "":
+        return ""
+    try:
+        x = float(v)
+    except Exception:
+        return str(v).strip()
+    if x != x:
+        return ""
+    half = round(x * 2.0) / 2.0
+    if abs(x - half) > 1e-6:
+        if abs(x - round(x)) < 1e-6:
+            return str(int(round(x)))
+        return f"{x:.1f}".rstrip("0").rstrip(".")
+    if abs(half - round(half)) < 1e-6:
+        return str(int(round(half)))
+    return f"{half:.1f}"
+
+
 def _normalize_shutuba_bataiju(snap: Dict[str, Any]) -> int:
-    """出馬表の馬体重を整数文字列に正規化（528.0 → 528）。"""
+    """出馬表の馬体重・斤量表示を正規化（528.0→528, 57.0→57, 55.5→55.5）。"""
     n = 0
     for v in snap.get("venues") or []:
         for r in v.get("races") or []:
@@ -481,15 +501,18 @@ def _normalize_shutuba_bataiju(snap: Dict[str, Any]) -> int:
             if not isinstance(rows, list):
                 continue
             for row in rows:
-                if not isinstance(row, dict) or "馬体重" not in row:
+                if not isinstance(row, dict):
                     continue
-                new_v = _fmt_bataiju_int(row.get("馬体重"))
-                if new_v != str(row.get("馬体重") or ""):
-                    row["馬体重"] = new_v
-                    n += 1
-                elif row.get("馬体重") != new_v:
-                    row["馬体重"] = new_v
-                    n += 1
+                if "馬体重" in row:
+                    new_v = _fmt_bataiju_int(row.get("馬体重"))
+                    if row.get("馬体重") != new_v:
+                        row["馬体重"] = new_v
+                        n += 1
+                if "斤量" in row:
+                    new_k = _fmt_kinryo_display(row.get("斤量"))
+                    if row.get("斤量") != new_k:
+                        row["斤量"] = new_k
+                        n += 1
     return n
 
 

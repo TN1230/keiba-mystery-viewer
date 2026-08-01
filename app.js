@@ -398,6 +398,22 @@
     return s;
   }
 
+  function formatKinryoDisplay(v) {
+    // 0.5kg 端数なしは整数、0.5 は小数1桁（57.0→57, 55.5→55.5）
+    if (v == null || v === "") return "";
+    const s = String(v).trim();
+    if (!s) return "";
+    const n = Number(s);
+    if (!Number.isFinite(n)) return s;
+    const half = Math.round(n * 2) / 2;
+    if (Math.abs(n - half) > 1e-6) {
+      if (Math.abs(n - Math.round(n)) < 1e-6) return String(Math.round(n));
+      return String(n);
+    }
+    if (Math.abs(half - Math.round(half)) < 1e-6) return String(Math.round(half));
+    return half.toFixed(1);
+  }
+
   function shutubaRowsForDisplay(rows) {
     const list = Array.isArray(rows) ? rows.slice() : [];
     if (state.shutubaSort !== "umaban") return list;
@@ -448,6 +464,7 @@
         const cls = classes.length ? ` class="${classes.join(" ")}"` : "";
         let cellVal = row[c] ?? "";
         if (c === "馬体重") cellVal = formatBataijuDisplay(cellVal);
+        if (c === "斤量") cellVal = formatKinryoDisplay(cellVal);
         html += `<td${cls}${styleAttr}>${escapeHtml(cellVal)}</td>`;
       }
       html += "</tr>";
