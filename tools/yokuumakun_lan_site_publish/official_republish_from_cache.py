@@ -517,6 +517,55 @@ def _fmt_kinryo_display(v: Any) -> str:
     return f"{half:.1f}"
 
 
+def _sui_short(v: Any) -> str:
+    s0 = str(v or "").strip()
+    if not s0 or s0 == "-":
+        return "-"
+    s = s0.split("（")[0].split("(")[0].strip() or s0
+    blob = s0
+    if "ホプ" in blob or "hopkins" in blob.lower():
+        return "ホプキンス"
+    if "モーリ" in blob:
+        return "モーリアティ"
+    if "ワトソン" in blob or s.lower() == "watson":
+        return "ワトソン"
+    if "アイ" in blob or s.lower() == "irene":
+        return "アイリーン"
+    if "ハンター" in blob or s.lower() == "hunter":
+        return "ハンター"
+    return s
+
+
+def _normalize_matrix_sui(snap: Dict[str, Any]) -> int:
+    """マトリクス『推』を前週同様の短名にそろえる。"""
+    n = 0
+    for v in snap.get("venues") or []:
+        for m in v.get("matrix") or []:
+            if not isinstance(m, dict) or "sui" not in m:
+                continue
+            new_s = _sui_short(m.get("sui"))
+            if m.get("sui") != new_s:
+                m["sui"] = new_s
+                n += 1
+        for r in v.get("races") or []:
+            if not isinstance(r, dict):
+                continue
+            # best_logic が日本語長文のとき key を正規化
+            bl = r.get("best_logic")
+            lab = r.get("best_logic_label")
+            blob = f"{bl} {lab}"
+            if isinstance(bl, str) and ("（" in bl or "ホプキンス" in bl or "ハンター（" in bl):
+                if "ホプ" in blob:
+                    r["best_logic"] = "hunter"
+                    r["best_logic_label"] = "ホプキンス（新馬戦特化）"
+                    n += 1
+                elif "ハンター" in blob:
+                    r["best_logic"] = "hunter"
+                    r["best_logic_label"] = "ハンター（夏競馬特化）"
+                    n += 1
+    return n
+
+
 def _normalize_shutuba_bataiju(snap: Dict[str, Any]) -> int:
     """出馬表の馬体重・斤量表示を正規化（528.0→528, 57.0→57, 55.5→55.5）。"""
     n = 0
@@ -676,6 +725,22 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
     if identical_irene and irene_present and irene_present[0] in {"様子・様子見"}:
         placeholder_cells = True
 
+    # ホームズ推: マトリクスは短名。長文や key 生値が残っていたら異常。
+    long_sui = 0
+    blank_sui = 0
+    sui_vals: List[str] = []
+    for v in snap.get("venues") or []:
+        for m in v.get("matrix") or []:
+            if not isinstance(m, dict):
+                continue
+            sui = str(m.get("sui") or "").strip()
+            if not sui or sui == "-":
+                blank_sui += 1
+            else:
+                sui_vals.append(sui)
+            if "（" in sui or "(" in sui or sui in {"watson", "irene", "hunter", "moriarty", "hope"}:
+                long_sui += 1
+
     ok = (
         bad_dev == 0
         and blank_h == 0
@@ -687,6 +752,8 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
         and not identical_watson
         and not identical_irene
         and not placeholder_cells
+        and long_sui == 0
+        and blank_sui == 0
         and len(races) >= 12
     )
     return {
@@ -708,6 +775,11 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
         "sample_dev": sample.get("dev"),
         "sample_holmes": sample.get("holmes_index") or sample.get("holmes"),
         "sample_cells": cells,
+        "sample_best_logic": sample.get("best_logic"),
+        "sample_best_logic_label": sample.get("best_logic_label"),
+        "long_sui": long_sui,
+        "blank_sui": blank_sui,
+        "sui_sample": sui_vals[:8],
         "sample_shutuba0": rows[0] if rows else None,
         "prev_week_ref": {
             "ok": bool(ref and ref.get("ok")),
@@ -887,6 +959,8 @@ def main() -> int:
         out["attempts"].append({"via": "enrich_holmes_from_helpers", **enrich})
         bataiju_n = _normalize_shutuba_bataiju(snap)
         out["attempts"].append({"via": "normalize_shutuba_bataiju", "changed": bataiju_n})
+        sui_n = _normalize_matrix_sui(snap)
+        out["attempts"].append({"via": "normalize_matrix_sui", "changed": sui_n})
 
         q = _quality(snap, ref=ref)
         out["quality"] = q

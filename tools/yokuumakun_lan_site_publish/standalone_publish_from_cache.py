@@ -709,7 +709,13 @@ def _build_shutuba(
     }
 
 
-def _pick_best_logic(logic_marks: dict[str, Any], rinfo: dict[str, Any]) -> tuple[str, str]:
+def _normalize_best_logic(
+    raw_key: Any,
+    raw_label: Any = None,
+    *,
+    hunter_label: Any = None,
+) -> tuple[str, str]:
+    """best_logic を (key, label) に正規化。マトリクス推は短名、詳細は label。"""
     aliases = {
         "ワトソン": "watson",
         "ワトソンロジック": "watson",
@@ -720,26 +726,111 @@ def _pick_best_logic(logic_marks: dict[str, Any], rinfo: dict[str, Any]) -> tupl
         "hunter": "hunter",
         "ハ/ホプ": "hunter",
         "ホプキンス": "hunter",
+        "hopkins": "hunter",
         "hope": "hunter",
+        "ホプキンス（新馬戦特化）": "hunter",
+        "ハンター（夏競馬特化）": "hunter",
         "モリア": "moriarty",
         "モリアーティ": "moriarty",
         "moriarty": "moriarty",
     }
-    hm = rinfo.get("hunter_mode")
-    hl = rinfo.get("hunter_label")
-    if hm in (True, 1, "1", "true", "True") or (isinstance(hl, str) and "ハンター" in hl):
-        return "hunter", LOGIC_LABELS["hunter"]
+    key_s = str(raw_key or "").strip()
+    lab_s = str(raw_label or "").strip()
+    hl = str(hunter_label or "").strip()
+    blob = f"{key_s} {lab_s} {hl}"
+    key = aliases.get(key_s) or aliases.get(lab_s)
+    if key is None:
+        low = key_s.lower()
+        if low in aliases:
+            key = aliases[low]
+        elif "ホプ" in blob or "hopkins" in blob.lower() or "新馬" in blob:
+            key = "hunter"
+        elif "ハンター" in blob or "夏競馬" in blob:
+            key = "hunter"
+        elif "ワトソン" in blob:
+            key = "watson"
+        elif "アイ" in blob:
+            key = "irene"
+        elif "モーリ" in blob:
+            key = "moriarty"
+        else:
+            key = low or "hunter"
 
-    explicit = rinfo.get("best_logic") or rinfo.get("sui") or rinfo.get("recommended_logic") or hl
-    if explicit:
-        key = aliases.get(str(explicit).strip(), str(explicit).strip().lower())
-        if key in LOGIC_LABELS:
-            return key, LOGIC_LABELS[key]
-        return key, str(explicit)
-    for key in ("hunter", "irene", "watson", "moriarty"):
-        if _mark_nonempty(logic_marks.get(key)):
-            return key, LOGIC_LABELS.get(key, key)
-    return "hunter", LOGIC_LABELS["hunter"]
+    if "ホプ" in blob or "hopkins" in blob.lower() or (hl and "ホプ" in hl):
+        return "hunter", "ホプキンス（新馬戦特化）"
+    if key == "hunter":
+        return "hunter", LOGIC_LABELS["hunter"]
+    if key in LOGIC_LABELS:
+        return key, LOGIC_LABELS[key]
+    return key, lab_s or key_s or "-"
+
+
+def _sui_short_label(best_key: str, best_label: str) -> str:
+    """マトリクス『ホームズ推』用の短名（前週スナップ準拠）。"""
+    blob = f"{best_key} {best_label}"
+    if "ホプ" in blob or "hopkins" in blob.lower() or "新馬戦特化" in blob:
+        return "ホプキンス"
+    if "モーリ" in blob or str(best_key).lower() == "moriarty":
+        return "モーリアティ"
+    if "ワトソン" in blob or str(best_key).lower() == "watson":
+        return "ワトソン"
+    if "アイ" in blob or str(best_key).lower() == "irene":
+        return "アイリーン"
+    if "ハンター" in blob or str(best_key).lower() == "hunter":
+        return "ハンター"
+    s = str(best_label or best_key or "").strip()
+    # 括弧付き説明を落とす
+    if "（" in s:
+        s = s.split("（", 1)[0].strip()
+    if "(" in s:
+        s = s.split("(", 1)[0].strip()
+    return s or "-"
+
+
+def _best_logic_from_edge_row(row: Any) -> tuple[str, str] | None:
+    if row is None:
+        return None
+    label = None
+    try:
+        from public_viewer.export_public_snapshot import _logic_label_for_row  # type: ignore
+
+        label = _logic_label_for_row(row)
+    except Exception:
+        label = getattr(row, "best_logic_label", None) if not isinstance(row, dict) else row.get("best_logic_label")
+    raw = getattr(row, "best_logic", None) if not isinstance(row, dict) else row.get("best_logic")
+    if raw in (None, "") and label in (None, ""):
+        # specialist presence sometimes encoded on cells
+        cells = _cells_from_edge_row(row)
+        if cells and cells.get("ハ/ホプ") not in (None, "", "-"):
+            return _normalize_best_logic("hunter", cells.get("ハ/ホプ"))
+        return None
+    return _normalize_best_logic(raw, label)
+
+
+def _pick_best_logic(
+    logic_marks: dict[str, Any],
+    rinfo: dict[str, Any],
+    *,
+    edge_best: tuple[str, str] | None = None,
+) -> tuple[str, str]:
+    """ホームズ推の正本は Edge best_logic。印の有無順で推測しない。"""
+    if edge_best is not None:
+        return _normalize_best_logic(edge_best[0], edge_best[1], hunter_label=rinfo.get("hunter_label"))
+
+    explicit = rinfo.get("best_logic") or rinfo.get("sui") or rinfo.get("recommended_logic")
+    if explicit not in (None, ""):
+        return _normalize_best_logic(explicit, rinfo.get("best_logic_label"), hunter_label=rinfo.get("hunter_label"))
+
+    hl = rinfo.get("hunter_label")
+    hm = rinfo.get("hunter_mode")
+    # hunter_mode は夏季フラグであり推奨そのものではない。ラベルがホプ/ハンターのときだけ採用。
+    if isinstance(hl, str) and hl.strip() and ("ホプ" in hl or "ハンター" in hl):
+        return _normalize_best_logic("hunter", hl, hunter_label=hl)
+    if hm in (True, 1, "1", "true", "True") and _format_mark_map(logic_marks.get("hunter") or logic_marks.get("hope")) != "-":
+        return _normalize_best_logic("hunter", hl or LOGIC_LABELS["hunter"], hunter_label=hl)
+
+    # 最終手段: 不明（印があるから推す、は禁止）
+    return "", "-"
 
 
 def _edge_cell_display(cell: Any, *, specialist: bool = False) -> str:
@@ -856,6 +947,7 @@ def _race_to_public(
     rinfo: dict[str, Any],
     *,
     edge_cells: dict[str, str] | None = None,
+    edge_best: tuple[str, str] | None = None,
 ) -> dict[str, Any] | None:
     if not isinstance(rinfo, dict):
         return None
@@ -864,7 +956,7 @@ def _race_to_public(
     shutuba = _build_shutuba(rinfo, logic_marks)
     if not shutuba.get("rows"):
         return None
-    best_key, best_label = _pick_best_logic(logic_marks, rinfo)
+    best_key, best_label = _pick_best_logic(logic_marks, rinfo, edge_best=edge_best)
     cells = _cells_for(best_key, logic_marks, rinfo, edge_cells=edge_cells)
     marks = _public_marks(logic_marks)
     # if already public marks on rinfo
@@ -959,13 +1051,7 @@ def _matrix_row(r: dict[str, Any]) -> dict[str, Any]:
     rank_txt = _safe_str(r.get("holmes_rank_text"))
     holmes_disp = f"{hi}（{rank_txt}）" if hi and rank_txt else hi
     cells = r.get("cells") or {}
-    best = r.get("best_logic")
-    sui = {
-        "watson": "ワトソン",
-        "irene": "アイリーン",
-        "hunter": "ハンター",
-        "moriarty": "モリアーティ",
-    }.get(str(best), _safe_str(r.get("best_logic_label")) or "-")
+    sui = _sui_short_label(str(r.get("best_logic") or ""), str(r.get("best_logic_label") or ""))
     return {
         "race_id": r.get("race_id"),
         "race": f"{r.get('place')} {r.get('R')}R {r.get('name')}".strip(),
@@ -1068,11 +1154,15 @@ def _try_build_snapshot_via_export(races_cache: dict[str, Any], day: str) -> dic
         return None
     if not isinstance(snap, dict) or int(snap.get("race_count") or 0) <= 0:
         return None
-    # 馬体重・斤量の表示正規化
+    # 馬体重・斤量・ホームズ推の表示正規化
     try:
-        from official_republish_from_cache import _normalize_shutuba_bataiju  # type: ignore
+        from official_republish_from_cache import (  # type: ignore
+            _normalize_shutuba_bataiju,
+            _normalize_matrix_sui,
+        )
 
         _normalize_shutuba_bataiju(snap)
+        _normalize_matrix_sui(snap)
     except Exception:
         pass
     snap["_build_via"] = "standalone_via_export_day_rows"
@@ -1113,15 +1203,19 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         pass
 
     day_rows = _collect_edge_day_rows(races_cache)
-    edge_best: dict[str, float] = {}
+    edge_scores: dict[str, float] = {}
+    edge_best_map: dict[str, tuple[str, str]] = {}
     for row in day_rows:
         rid = str(getattr(row, "race_id", "") or "")
         if not rid:
             continue
         try:
-            edge_best[rid] = float(getattr(row, "best_score"))
+            edge_scores[rid] = float(getattr(row, "best_score"))
         except Exception:
-            continue
+            pass
+        bl = _best_logic_from_edge_row(row)
+        if bl is not None:
+            edge_best_map[rid] = bl
     edge_cells_map = _edge_cells_by_race(day_rows)
     hfields_fn = None
     try:
@@ -1141,19 +1235,20 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
                 got = _as_holmes_score(morning_map[rid])
                 if got is not None:
                     rinfo["holmes_index"] = got
-            if rid in edge_best and "best_score" not in rinfo:
-                rinfo["best_score"] = edge_best[rid]
+            if rid in edge_scores and "best_score" not in rinfo:
+                rinfo["best_score"] = edge_scores[rid]
         pub = _race_to_public(
             str(rid),
             rinfo if isinstance(rinfo, dict) else {},
             edge_cells=edge_cells_map.get(str(rid)),
+            edge_best=edge_best_map.get(str(rid)),
         )
         if pub is None:
             skipped += 1
             continue
         if not pub.get("holmes_index"):
             morning = morning_map.get(rid)
-            latest = edge_best.get(rid)
+            latest = edge_scores.get(rid)
             filled = False
             if callable(hfields_fn):
                 try:

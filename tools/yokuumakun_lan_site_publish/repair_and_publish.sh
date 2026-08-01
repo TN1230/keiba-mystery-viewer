@@ -83,6 +83,17 @@ identical_irene = len(set(irene_cells)) <= 1 and len(irene_cells) >= max(8, n //
 placeholder_cells = (
     identical_watson and watson_cells[:1] == ["様子・中位帯"]
 ) or (identical_irene and irene_cells[:1] == ["様子・様子見"])
+long_sui = blank_sui = 0
+sui_vals = []
+for v in d.get("venues") or []:
+    for m in v.get("matrix") or []:
+        sui = str((m or {}).get("sui") or "").strip()
+        if not sui or sui == "-":
+            blank_sui += 1
+        else:
+            sui_vals.append(sui)
+        if "（" in sui or "(" in sui or sui in {"watson", "irene", "hunter", "moriarty", "hope"}:
+            long_sui += 1
 r0 = races[0] if races else None
 if r0:
     rows = (r0.get("shutuba") or {}).get("rows") or []
@@ -110,7 +121,7 @@ print(
     f"identical_holmes={identical} watson_blank={watson_blank} "
     f"third_blank={third_blank} umaban_orderish={umabanish} "
     f"identical_watson_cells={identical_watson} identical_irene_cells={identical_irene} "
-    f"placeholder_cells={placeholder_cells}"
+    f"placeholder_cells={placeholder_cells} long_sui={long_sui} blank_sui={blank_sui}"
 )
 if holmes_nums:
     print("holmes_top", Counter(holmes_nums).most_common(8))
@@ -118,6 +129,8 @@ if watson_cells:
     print("watson_cells_top", Counter(watson_cells).most_common(6))
 if irene_cells:
     print("irene_cells_top", Counter(irene_cells).most_common(6))
+if sui_vals:
+    print("sui_top", Counter(sui_vals).most_common(8))
 ok = (
     n > 0
     and missing_h == 0
@@ -127,6 +140,8 @@ ok = (
     and not identical_watson
     and not identical_irene
     and not placeholder_cells
+    and long_sui == 0
+    and blank_sui == 0
 )
 if ok:
     print("QUALITY_OK")

@@ -168,18 +168,37 @@
   }
 
   function matrixSuiLabel(raw) {
-    const s = String(raw || "").trim();
-    if (!s || s === "-") return "-";
+    const s0 = String(raw || "").trim();
+    if (!s0 || s0 === "-") return "-";
+    // 括弧付き説明を落として短名に（ホプキンス（新馬戦特化）→ホプキンス）
+    let s = s0.split("（")[0].split("(")[0].trim() || s0;
     const map = {
       ワ: "ワトソン",
+      watson: "ワトソン",
+      ワトソン: "ワトソン",
       アイ: "アイリーン",
+      irene: "アイリーン",
+      アイリーン: "アイリーン",
       モ: "モーリアティ",
       モリ: "モーリアティ",
+      moriarty: "モーリアティ",
+      モーリアティ: "モーリアティ",
       ハ: "ハンター",
+      hunter: "ハンター",
+      ハンター: "ハンター",
       ホプ: "ホプキンス",
+      hopkins: "ホプキンス",
+      hope: "ホプキンス",
+      ホプキンス: "ホプキンス",
       "ハ/ホプ": "ハンター",
     };
-    return map[s] || s;
+    if (map[s]) return map[s];
+    if (s.includes("ホプ")) return "ホプキンス";
+    if (s.includes("モーリ")) return "モーリアティ";
+    if (s.includes("ワトソン")) return "ワトソン";
+    if (s.includes("アイリー") || s === "アイ") return "アイリーン";
+    if (s.includes("ハンター")) return "ハンター";
+    return map[s0] || s;
   }
 
   function thirdDetectiveLabel(row) {

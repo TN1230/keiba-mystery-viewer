@@ -165,6 +165,38 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertEqual(race["shutuba"]["rows"][0]["馬体重"], "450")
         self.assertEqual(race["shutuba"]["rows"][0]["斤量"], "55")
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
+        self.assertEqual(race["best_logic"], "hunter")
+        self.assertEqual(snap["venues"][0]["matrix"][0]["sui"], "ハンター")
+
+
+class HolmesSuiTests(unittest.TestCase):
+    def test_sui_short_label(self) -> None:
+        from standalone_publish_from_cache import _sui_short_label, _normalize_best_logic
+
+        self.assertEqual(_sui_short_label("hunter", "ハンター（夏競馬特化）"), "ハンター")
+        self.assertEqual(_sui_short_label("hunter", "ホプキンス（新馬戦特化）"), "ホプキンス")
+        self.assertEqual(_sui_short_label("watson", "ワトソン"), "ワトソン")
+        key, lab = _normalize_best_logic("ホプキンス（新馬戦特化）")
+        self.assertEqual(key, "hunter")
+        self.assertIn("ホプキンス", lab)
+        self.assertEqual(_sui_short_label(key, lab), "ホプキンス")
+
+    def test_pick_best_logic_prefers_edge_not_mark_order(self) -> None:
+        from standalone_publish_from_cache import _pick_best_logic
+
+        marks = {
+            "watson": {"◎": 1},
+            "irene": {"◎": 2},
+            "hunter": None,
+            "moriarty": None,
+        }
+        # 印だけ見ると irene になりがちだったが、Edge 推が watson なら watson
+        key, lab = _pick_best_logic(marks, {}, edge_best=("watson", "ワトソン"))
+        self.assertEqual(key, "watson")
+        self.assertEqual(lab, "ワトソン")
+        # Edge 無し・明示無しなら推測しない
+        key2, lab2 = _pick_best_logic(marks, {})
+        self.assertEqual(lab2, "-")
 
 
 class MatrixCellsTests(unittest.TestCase):
