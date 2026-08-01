@@ -22,7 +22,7 @@ run_step() {
   set +e
   "$@"
   local rc=$?
-  set -e
+  set +e
   echo "=== ${name} rc=${rc} ==="
   return "$rc"
 }
