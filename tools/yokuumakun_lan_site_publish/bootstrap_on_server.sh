@@ -43,6 +43,7 @@ for f in \
   install_remote_bootstrap_endpoint.py \
   morning_bulk_publish_watch.py \
   install_daily_publish_watch.py \
+  upload_bootstrap_status.py \
   yokuum-morning-publish-watch.service.example \
   yokuum-morning-publish-watch.timer.example
 do
@@ -101,10 +102,29 @@ echo "=== latest.json ==="
 curl -fsSL "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json" | head -c 800
 echo
 
+FINAL_RC=1
 if curl -fsSL "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json" 2>/dev/null | grep -q '"race_count": [1-9]'; then
   echo "DONE: site has races"
-  exit 0
+  FINAL_RC=0
+else
+  echo "ERROR: latest.json still empty"
+  echo "Also check: ls -lt $ROOT/logs/morning_bulk_races_*.pkl | head"
+  FINAL_RC=1
 fi
-echo "ERROR: latest.json still empty — paste /tmp/lan_site_publish.log"
-echo "Also check: ls -lt $ROOT/logs/morning_bulk_races_*.pkl | head"
-exit 1
+
+# 実行結果を公開JSONへ（次回クラウド側で原因確認できるようにする）
+if [[ -f "$TMP/upload_bootstrap_status.py" ]]; then
+  # tee 先のログがあればそれを、なければこの実行の journal 相当として /tmp を使う
+  STATUS_LOG="/tmp/lan_site_publish.log"
+  if [[ ! -f "$STATUS_LOG" ]]; then
+    STATUS_LOG="/tmp/lan_site_publish_inline.log"
+    # 最低限の状態を残す
+    {
+      echo "inline status $(date -Iseconds)"
+      ls -lt "$ROOT/logs"/morning_bulk_races_*.pkl 2>/dev/null | head -20 || true
+      ls -lt "$ROOT/logs"/morning_bulk_done_*.flag 2>/dev/null | head -20 || true
+    } >"$STATUS_LOG"
+  fi
+  python3 "$TMP/upload_bootstrap_status.py" --root "$ROOT" --log "$STATUS_LOG" --rc "$FINAL_RC" || true
+fi
+exit "$FINAL_RC"
