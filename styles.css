@@ -1090,6 +1090,44 @@ table.shutuba .mark-i { color: #1565c0; }
 table.shutuba .mark-h { color: #16a085; }
 table.shutuba .mark-m { color: #7b1fa2; }
 
+/* スマホ: ロゴが画面外のときだけ右下に「上部へ」 */
+.back-to-top {
+  display: none;
+}
+@media (max-width: 720px) {
+  .back-to-top {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: calc(0.85rem + env(safe-area-inset-right));
+    bottom: calc(0.85rem + env(safe-area-inset-bottom));
+    z-index: 1200;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(11, 61, 46, 0.28);
+    border-radius: 999px;
+    background: rgba(255, 252, 245, 0.96);
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .back-to-top[hidden] {
+    display: none !important;
+  }
+  .back-to-top:active {
+    transform: translateY(1px);
+  }
+}
+
 .site-footer {
   text-align: center;
   padding: 1.25rem var(--pad) calc(2rem + env(safe-area-inset-bottom));
