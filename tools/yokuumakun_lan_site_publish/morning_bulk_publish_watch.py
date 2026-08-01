@@ -238,15 +238,18 @@ def _public_stale_vs_cache(
     return False, "cache_not_newer"
 
 
-def _public_stale_during_prerace_window(snap: dict[str, Any]) -> tuple[bool, str]:
-    """直前窓のレースが朝予想のままなら再 publish。
+def _public_stale_during_prerace_window(
+    snap: dict[str, Any], root: Path | None = None, day: str | None = None
+) -> tuple[bool, str]:
+    """直前窓で「キャッシュは直前更新済みなのに公開が朝のまま」なら再 publish。
 
-    重要: 他レースの直近 updated_at ではスキップしない。
-    本日(2026-08-01)は札幌11R公開(15:11)のあと、新潟7R/中京7R が
-    朝の predicted_at のまま残った。
+    未予想（キャッシュも朝のまま）のレースでは無駄に publish しない。
     """
     now = datetime.now(_JST)
     updated = _parse_dt(snap.get("updated_at"))
+    cache_by_id: dict[str, dict[str, Any]] = {}
+    if root is not None and day:
+        cache_by_id = _load_cache_races(root, day)
 
     window_start = now - _PRE_RACE_LOOKBACK
     window_end = now + _PRE_RACE_LOOKAHEAD
@@ -265,13 +268,25 @@ def _public_stale_during_prerace_window(snap: dict[str, Any]) -> tuple[bool, str
             continue
         if not (window_start <= start_dt <= window_end):
             continue
-        pred = _parse_dt(_predicted_at_of(r))
-        # 発走20分以上前の predicted_at のまま = 直前成功が未反映
-        if pred is None or (start_dt - pred) > _PRE_RACE_FRESH_BEFORE:
-            stale_in_window += 1
-            place = str(r.get("place") or "")
-            rn = str(r.get("R") or r.get("race_no") or "")
-            examples.append(f"{place}{rn}R@{start_s}")
+        pub_pred = _parse_dt(_predicted_at_of(r))
+        pub_stale = pub_pred is None or (start_dt - pub_pred) > _PRE_RACE_FRESH_BEFORE
+        if not pub_stale:
+            continue
+        rid = str(r.get("race_id") or "")
+        cache_r = cache_by_id.get(rid) if rid else None
+        cache_pred = _parse_dt(_predicted_at_of(cache_r)) if cache_r else None
+        # キャッシュ側が直前更新済み（発走20分以内）なのに公開だけ古い
+        cache_fresh = cache_pred is not None and (start_dt - cache_pred) <= _PRE_RACE_FRESH_BEFORE
+        cache_newer = (
+            cache_pred is not None
+            and (pub_pred is None or cache_pred > pub_pred + timedelta(seconds=30))
+        )
+        if not (cache_fresh or cache_newer):
+            continue
+        stale_in_window += 1
+        place = str(r.get("place") or "")
+        rn = str(r.get("R") or r.get("race_no") or "")
+        examples.append(f"{place}{rn}R@{start_s}")
     if stale_in_window > 0:
         detail = (
             f"stale_prerace_races={stale_in_window}"
@@ -302,7 +317,7 @@ def decide_publish(root: Path, day: str, snap: dict[str, Any] | None) -> dict[st
         out["detail"] = why
         return out
 
-    stale, why2 = _public_stale_during_prerace_window(snap)
+    stale, why2 = _public_stale_during_prerace_window(snap, root, day)
     if stale:
         out["action"] = "force_publish"
         out["reason"] = "stale_during_prerace"
