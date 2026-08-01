@@ -607,7 +607,7 @@
     }
     return (
       `ホームズ推奨: <span class="holmes-recommend">` +
-      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="34" height="34" decoding="async" />` +
       `<strong>${escapeHtml(label)}</strong></span>`
     );
   }
@@ -752,7 +752,8 @@
     const m = s.match(
       /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
     );
-    const lines = [];
+    // 【最終更新日時】であることが一目で分かるよう見出し付きで表示
+    const lines = ["【最終更新日時】"];
     if (m) {
       lines.push(`📅${m[1]}`);
       if (m[2]) lines.push(`⏰${m[2]}`);
