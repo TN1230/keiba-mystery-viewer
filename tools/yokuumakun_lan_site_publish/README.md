@@ -10,7 +10,13 @@
 3. **systemd timer**（05:30–11:00）で、完了済みなのに latest が空なら再 publish（保険）
 4. admin の `IndentationError` 時はバックアップから自動復旧
 
-## サーバーで実行（推奨）
+## 今すぐレースをサイトへ反映（最短）
+```bash
+export YOKUMAKUN_SUDO_PASS='83670824'
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
+```
+
+## サーバーで実行（恒久パッチ込み）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
 curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/lan-site-publish-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
