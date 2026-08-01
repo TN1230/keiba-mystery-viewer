@@ -14,9 +14,26 @@ powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 
 ## サーバー上で直接
 
+一括（tunnel を先に実行。途中失敗でも続行）:
+
 ```bash
 export YOKUMAKUN_SUDO_PASS='（sudo パスワード = SSH pass のことが多い）'
 curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_on_server.sh | bash | tee /tmp/lan_apply.log
+```
+
+tunnel だけ（最短・推奨トラブルシュート）:
+
+```bash
+export YOKUMAKUN_SUDO_PASS='83670824'
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_only.sh | bash
+```
+
+失敗時は必ず貼る:
+```bash
+tail -n 120 /tmp/lan_apply.log
+systemctl status yokuum-ssh-tcp-tunnel --no-pager
+journalctl -u yokuum-ssh-tcp-tunnel -n 80 --no-pager
+cat /opt/yokuumakun_auto-x/logs/ssh_endpoint.local.json
 ```
 
 ## 適用後の確認（クラウド側）
