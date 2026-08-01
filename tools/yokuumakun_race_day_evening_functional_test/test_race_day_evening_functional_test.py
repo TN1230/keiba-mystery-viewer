@@ -20,6 +20,8 @@ from race_day_evening_functional_test import (
     _report_has_errors,
     attempt_autofixes,
     build_report,
+    collect_unresolved_remediations,
+    remediation_advice,
 )
 
 
@@ -224,6 +226,65 @@ class AutofixTests(unittest.TestCase):
         _rebuild_bugs_warnings(suite)
         self.assertEqual(suite.bugs, ["a: x"])
         self.assertEqual(suite.warnings, ["b: y"])
+
+    def test_report_includes_remediation_for_unfixed(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-01",
+            started_at="t0",
+            finished_at="t1",
+            race_day=True,
+            overall_ok=False,
+            bugs=["morning_bulk_cache: 朝一斉 cache/done flag が無い"],
+            checks=[
+                CheckResult(
+                    "morning_bulk_cache",
+                    False,
+                    "朝一斉 cache/done flag が無い",
+                    "error",
+                ),
+                CheckResult("admin_health", True, "ok", "info"),
+            ],
+            autofixes=[
+                AutofixResult(
+                    "morning_bulk_cache",
+                    False,
+                    False,
+                    "過去データ/外部依存のため自動修正対象外",
+                    skipped_reason="non_autofixable",
+                ),
+            ],
+        )
+        title, desc, color = build_report(suite)
+        self.assertIn("不具合あり", title)
+        self.assertIn("【対処法】", desc)
+        self.assertIn("morning_bulk_cache", desc)
+        self.assertIn("自己修正対象外", desc)
+        self.assertIn("→", desc)
+        self.assertIn("朝一斉", remediation_advice("morning_bulk_cache"))
+        self.assertEqual(color, 0xE74C3C)
+
+    def test_collect_unresolved_skips_ok_checks(self) -> None:
+        suite = SuiteResult(
+            day="2026-08-01",
+            started_at="t0",
+            checks=[
+                CheckResult("morning_bulk_cache", True, "ok", "info"),
+                CheckResult("netkeiba_light", False, "down", "error"),
+            ],
+            autofixes=[
+                AutofixResult(
+                    "netkeiba_light",
+                    False,
+                    False,
+                    "対象外",
+                    skipped_reason="non_autofixable",
+                ),
+            ],
+        )
+        items = collect_unresolved_remediations(suite)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0][0], "netkeiba_light")
+        self.assertEqual(items[0][1], "自己修正対象外")
 
 
 if __name__ == "__main__":

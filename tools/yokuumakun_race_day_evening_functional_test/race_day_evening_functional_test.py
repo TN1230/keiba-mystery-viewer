@@ -61,6 +61,66 @@ NON_AUTOFIXABLE_CHECKS = frozenset(
     }
 )
 
+# 自己修正しなかった（または失敗した）項目向けの手動対処ガイド
+REMEDIATION_BY_CHECK: dict[str, str] = {
+    "morning_bulk_cache": (
+        "当日の朝一斉が未実施/失敗の可能性。logs/morning_bulk_*.log と "
+        "morning_bulk_races_YYYYMMDD.pkl / morning_bulk_done_*.flag を確認。"
+        "当日分の再生成は通常不可なので、翌朝の cron/timer・worker 設定を点検。"
+    ),
+    "race_day_stop_finalize_logs": (
+        "20:00 の race_day_stop / finalize が未実行の疑い。"
+        "サーバーで race_day_stop_hwm.sh と finalize スクリプトの有無・crontab・"
+        "実行ログを確認し、必要なら手動実行後に logs/race_day_stop_*.log / "
+        "race_day_finalize_*.log を見る。"
+    ),
+    "automation_stopped": (
+        "sudo systemctl stop yokuum-server-automation-x.service を実行し、"
+        "systemctl is-active で inactive を確認。"
+        "YOKUMAKUN_SUDO_PASS 未設定や unit 名違いがないかも確認。"
+    ),
+    "no_stuck_workers": (
+        "pgrep -af 'pre_race_auto_predict_worker|morning_bulk_server_worker|"
+        "graded_auto_predict_worker' で残留を確認し、該当 python worker のみ "
+        "pkill -f で停止。止まらない場合は PID を特定して kill。"
+    ),
+    "admin_health": (
+        "sudo systemctl status/restart yokuum-admin-panel.service を実行し、"
+        "curl -sS http://127.0.0.1:8791/health を確認。"
+        "起動失敗時は journalctl -u yokuum-admin-panel.service -n 100 を見る。"
+    ),
+    "publish_patches": (
+        "LAN publish ツールを再配置し、"
+        "python3 patch_pre_race_publish_on_success.py /opt/yokuumakun_auto-x と "
+        "python3 patch_worker_publish_on_success.py /opt/yokuumakun_auto-x を実行。"
+        "pre_race / morning_bulk worker に publish ブロックがあるか確認。"
+    ),
+    "publish_watch_timer": (
+        "python3 install_daily_publish_watch.py /opt/yokuumakun_auto-x を実行し、"
+        "systemctl is-enabled yokuum-morning-publish-watch.timer が enabled か確認。"
+    ),
+    "eod_snapshot_state": (
+        "race_day_finalize 未実行の疑い。finalize スクリプトを手動実行し、"
+        "公開 latest.json が cleared/空、または当日アーカイブ "
+        "snapshots/YYYY-MM-DD.json があることを確認。"
+    ),
+    "daytime_publish_evidence": (
+        "当日中の公開更新痕跡が無い。admin_api.json / force_publish_last.json / "
+        "logs/server_automation_debug.jsonl の publish 行を確認。"
+        "恒久対策として publish パッチと morning-publish-watch.timer を再導入。"
+    ),
+    "pdf_holmes_sample": (
+        "公開 PDF のホームズ指数欄が空/欠落。"
+        "PDF 生成側のホームズ埋め込みパッチ適用状況と、該当レースの "
+        "holmes_index 元データを確認し、必要なら再 publish。"
+    ),
+    "netkeiba_light": (
+        "netkeiba 到達失敗。サーバーからの DNS/HTTPS/ egress を確認 "
+        "(curl -I https://race.netkeiba.com/top/)。"
+        "一時障害なら様子見、継続ならプロキシ/FW を点検。"
+    ),
+}
+
 
 @dataclass
 class CheckResult:
@@ -1008,6 +1068,59 @@ def _rebuild_bugs_warnings(suite: SuiteResult) -> None:
             suite.bugs.append(msg)
 
 
+def _autofix_status_label(af: AutofixResult | None) -> str:
+    if af is None:
+        return "自己修正未実施"
+    if not af.attempted:
+        reason = af.skipped_reason or "skipped"
+        if reason == "non_autofixable":
+            return "自己修正対象外"
+        if reason == "disabled":
+            return "自己修正無効"
+        if reason == "low_budget":
+            return "予算不足で自己修正スキップ"
+        if reason == "no_handler":
+            return "自己修正ハンドラなし"
+        if reason in ("no_stop_finalize_script", "no_finalize_means"):
+            return "自己修正手段なし"
+        return f"自己修正スキップ({reason})"
+    if af.ok:
+        return "自己修正成功（再検査で再発）"
+    return "自己修正失敗"
+
+
+def remediation_advice(check_name: str) -> str:
+    return REMEDIATION_BY_CHECK.get(
+        check_name,
+        "該当チェックの詳細ログを確認し、関連サービス/スクリプトを手動で点検・修復してください。",
+    )
+
+
+def collect_unresolved_remediations(suite: SuiteResult) -> list[tuple[str, str, str]]:
+    """自己修正で直らなかった残存 NG/WARN の (name, status, advice) 一覧。"""
+    af_by = {af.check_name: af for af in suite.autofixes}
+    items: list[tuple[str, str, str]] = []
+    for cr in suite.checks:
+        if cr.ok:
+            continue
+        if cr.detail == "skipped_low_budget":
+            continue
+        af = af_by.get(cr.name)
+        # 自己修正成功扱いでまだ NG は稀だが、残存なら対処法を出す
+        status = _autofix_status_label(af)
+        items.append((cr.name, status, remediation_advice(cr.name)))
+    if suite.timed_out:
+        items.append(
+            (
+                "deadline",
+                "タイムアウト",
+                "YOKUMAKUN_EOD_TEST_BUDGET_SEC を見直すか、重い検査の失敗原因を先に解消。"
+                "次回は --budget-sec= で余裕を見て再実行。",
+            )
+        )
+    return items
+
+
 def build_report(suite: SuiteResult) -> tuple[str, str, int]:
     """returns title, description, color"""
     if suite.skipped:
@@ -1070,6 +1183,17 @@ def build_report(suite: SuiteResult) -> tuple[str, str, int]:
         lines.append("【警告】")
         for w in warns:
             lines.append(f"- {w}")
+
+    # 自己修正で直らなかった残存項目の対処法
+    # （テストwebhook / エラーwebhook は同一本文の embed を送る）
+    remediations = collect_unresolved_remediations(suite)
+    if remediations:
+        lines.append("")
+        lines.append("【対処法】（自己修正できなかった項目）")
+        for name, status, advice in remediations:
+            lines.append(f"- {name} [{status}]")
+            lines.append(f"  → {advice}")
+
     if suite.overall_ok and not bugs:
         lines.append("")
         lines.append("重大な不具合は検出されませんでした。")
