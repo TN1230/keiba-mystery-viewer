@@ -607,9 +607,27 @@
     }
     return (
       `ホームズ推奨: <span class="holmes-recommend">` +
-      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="34" height="34" decoding="async" />` +
       `<strong>${escapeHtml(label)}</strong></span>`
     );
+  }
+
+  function formatPredictedAtLabel(raw) {
+    if (raw == null || raw === "") return "未更新";
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      const d = new Date(raw * (raw < 1e12 ? 1000 : 1));
+      if (!Number.isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+    }
+    const s = String(raw).trim();
+    if (!s) return "未更新";
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2})(?::\d{2})?/);
+    if (m) return `${m[1]} ${m[2]}`;
+    const m2 = s.match(/^(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}:\d{2})/);
+    if (m2) return `${m2[1]} ${m2[2]}`;
+    return s;
   }
 
   function renderDetail() {
@@ -622,9 +640,11 @@
     const r = found.race;
     const marks = r.marks || {};
     const cells = r.cells || {};
+    const predictedAtLabel = formatPredictedAtLabel(r.predicted_at);
     let html = `
       <h3>${escapeHtml(r.place)} ${escapeHtml(r.R)}R ${escapeHtml(r.name || "")}</h3>
       <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      <p class="meta race-predicted-at">予想更新時間: <strong>${escapeHtml(predictedAtLabel)}</strong></p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>
       <p class="meta">${formatHolmesRecommendHtml(r)}</p>
@@ -732,7 +752,8 @@
     const m = s.match(
       /^(\d{4}-\d{2}-\d{2})(?:[T\s]+)(\d{2}:\d{2}(?::\d{2})?)?/
     );
-    const lines = [];
+    // 【最終更新日時】であることが一目で分かるよう見出し付きで表示
+    const lines = ["【最終更新日時】"];
     if (m) {
       lines.push(`📅${m[1]}`);
       if (m[2]) lines.push(`⏰${m[2]}`);
