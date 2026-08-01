@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-# サーバー上 / LAN から一括適用（SSH tunnel を最優先 + publish fix + webhook filter）
-# Windows からは deploy_from_windows.ps1（paramiko + sudo -S）を推奨。
-#
-# 注意: 以前の版は publish force 失敗で set -e により tunnel まで到達しないことがあった。
+# 一括適用（埋め込み tunnel 優先 → publish fix → webhook filter）
+# CDN キャッシュ回避のため tunnel は同梱埋め込みスクリプトを使う。
 set -uo pipefail
-# 個別ステップの失敗で全体を止めない（tunnel 確保を優先）
 
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
-RC_TUNNEL=0
-RC_PUBLISH=0
-RC_FILTER=0
+# ピン留め（raw ブランチURLのキャッシュ踏み抜き）
+PUB_REF="${YOKUMAKUN_PUBLISH_REF:-25405d13554922453479d50565d11e52b3fd7519}"
+FILTER_REF="${YOKUMAKUN_FILTER_REF:-58ccef1fe949acf32aa0cf5633cf0b9a5ebea974}"
+TUNNEL_REF="${YOKUMAKUN_TUNNEL_REF:-}"  # 空なら同ディレクトリの embedded を優先
 
 echo "INFO: lan_apply_pending root=$ROOT"
 
 run_step() {
-  local name="$1"
-  shift
-  echo
-  echo "=== ${name} ==="
+  local name="$1"; shift
+  echo; echo "=== ${name} ==="
   set +e
   "$@"
   local rc=$?
@@ -27,69 +23,42 @@ run_step() {
   return "$rc"
 }
 
-# --- [1/3] SSH tunnel FIRST（クラウド到達の前提） ---
-WRAP="$(mktemp -d)"
-cleanup() { rm -rf "$WRAP"; }
-trap cleanup EXIT
-if [[ -n "$SUDO_PASS" ]]; then
-  printf '%s\n' "$SUDO_PASS" >"$WRAP/pass"
-  chmod 600 "$WRAP/pass"
-  cat >"$WRAP/sudo" <<EOF
-#!/bin/bash
-echo "\$(cat '$WRAP/pass')" | /usr/bin/sudo -S -p '' "\$@"
-EOF
-  chmod 755 "$WRAP/sudo"
-  export PATH="$WRAP:$PATH"
+# [1] tunnel — embedded（同梱）を curl 経由でも取れるように GitHub から取得
+EMBED_URL_JS="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh"
+# jsDelivr branch tip; also try commit if set
+if [[ -n "$TUNNEL_REF" ]]; then
+  EMBED_URL_JS="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${TUNNEL_REF}/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh"
 fi
 
-run_step "[1/3] SSH internet tunnel" \
-  env YOKUMAKUN_SUDO_PASS="$SUDO_PASS" bash -c \
-  'curl -fsSL "https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_ssh_internet_tunnel/bootstrap_on_server.sh" | bash' \
-  || RC_TUNNEL=$?
+run_step "[1/3] SSH tunnel (embedded)" bash -c "
+  export YOKUMAKUN_SUDO_PASS=$(printf %q "$SUDO_PASS")
+  export YOKUMAKUN_SSH_PASS=$(printf %q "$SUDO_PASS")
+  curl -fsSL '$EMBED_URL_JS' | bash
+" || true
 
-# --- [2/3] publish fix（force publish 失敗でもインストールは進める） ---
-run_step "[2/3] morning-bulk publish fix" bash -c '
-  set +e
-  curl -fsSL \
-    "https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/morning-bulk-publish-fix-19c2/tools/yokuumakun_morning_bulk_publish_fix/bootstrap_on_server.sh" \
-    | bash
-  rc=$?
-  # publish 失敗でもパッチ自体は入っていることが多い。続行。
+# [2] publish fix — 失敗しても続行
+run_step "[2/3] publish fix" bash -c "
+  export YOKUMAKUN_SUDO_PASS=$(printf %q "$SUDO_PASS")
+  curl -fsSL 'https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${PUB_REF}/tools/yokuumakun_morning_bulk_publish_fix/bootstrap_on_server.sh' | bash
   exit 0
-' || RC_PUBLISH=$?
+" || true
 
-# --- [3/3] webhook filter ---
-run_step "[3/3] morning-bulk test-webhook filter" bash -c '
-  curl -fsSL \
-    "https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/morning-bulk-test-webhook-filter-19c2/tools/yokuumakun_morning_bulk_test_webhook_filter/bootstrap_on_server.sh" \
-    | bash
-' || RC_FILTER=$?
+# [3] webhook filter
+run_step "[3/3] webhook filter" bash -c "
+  curl -fsSL 'https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${FILTER_REF}/tools/yokuumakun_morning_bulk_test_webhook_filter/bootstrap_on_server.sh' | bash
+" || true
 
 echo
-echo "DONE: lan_apply_pending finished tunnel_rc=$RC_TUNNEL publish_rc=$RC_PUBLISH filter_rc=$RC_FILTER"
-echo "--- ssh_endpoint.json ---"
+echo "DONE lan_apply_pending"
+echo "--- ssh_endpoint ---"
 curl -fsSL "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/ssh_endpoint.json" || echo "(missing)"
 echo
-echo "--- local endpoint ---"
-cat "$ROOT/logs/ssh_endpoint.local.json" 2>/dev/null || echo "(no local endpoint file)"
+cat "$ROOT/logs/ssh_endpoint.local.json" 2>/dev/null || true
 echo
-echo "--- snapshot head ---"
+echo "--- snapshot ---"
 curl -fsSL "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/snapshots/latest.json" | head -c 400 || true
 echo
-echo "--- tunnel service ---"
-systemctl is-active yokuum-ssh-tcp-tunnel.service 2>/dev/null || true
-if [[ -n "$SUDO_PASS" ]]; then
-  echo "$SUDO_PASS" | sudo -S -p '' journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager 2>/dev/null || true
-else
-  journalctl -u yokuum-ssh-tcp-tunnel.service -n 40 --no-pager 2>/dev/null || true
-fi
-
-# tunnel が公開できていれば 0、否则 1（ログは出したうえで）
 if curl -fsSL "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/public-viewer/ssh_endpoint.json" 2>/dev/null | grep -q '"port"'; then
   exit 0
-fi
-if [[ -f "$ROOT/logs/ssh_endpoint.local.json" ]] && grep -q '"port"' "$ROOT/logs/ssh_endpoint.local.json"; then
-  echo "WARN: local endpoint exists but public ssh_endpoint.json missing — paste local JSON to cloud agent"
-  exit 2
 fi
 exit 1

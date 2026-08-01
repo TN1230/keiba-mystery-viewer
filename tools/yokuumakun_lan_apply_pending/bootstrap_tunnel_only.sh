@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# SSH tunnel だけを入れる（最短）。publish 失敗の影響を受けない。
+# SSH tunnel だけ（埋め込み版を jsDelivr 経由で実行 — raw ブランチキャッシュを回避）
 set -euo pipefail
 export YOKUMAKUN_SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
-curl -fsSL \
-  "https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_ssh_internet_tunnel/bootstrap_on_server.sh" \
-  | env YOKUMAKUN_SUDO_PASS="$YOKUMAKUN_SUDO_PASS" bash | tee /tmp/ssh_tunnel_only.log
+URL="${1:-https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/bootstrap_tunnel_embedded.sh}"
+curl -fsSL "$URL" | env YOKUMAKUN_SUDO_PASS="$YOKUMAKUN_SUDO_PASS" bash | tee /tmp/ssh_tunnel_only.log
