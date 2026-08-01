@@ -510,6 +510,39 @@ def _gate_diag(gate: Any) -> dict[str, Any]:
     return {"type": "dict", "keys": keys, "shallow": shallow, "holmes_candidates": cands}
 
 
+def _fmt_bataiju(v: Any) -> str:
+    """馬体重は整数表示（528.0 → 528）。増減付き '480(+4)' も本体を整数化。"""
+    import re
+
+    if v is None or v == "":
+        return ""
+    if isinstance(v, bool):
+        return _safe_str(v)
+    if isinstance(v, (int, float)):
+        try:
+            x = float(v)
+        except Exception:
+            return ""
+        if x != x:
+            return ""
+        return str(int(round(x)))
+    s = str(v).strip()
+    if not s:
+        return ""
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", s):
+        try:
+            return str(int(round(float(s))))
+        except Exception:
+            return s
+    m = re.match(r"^(-?\d+(?:\.\d+)?)(.*)$", s)
+    if m:
+        try:
+            return str(int(round(float(m.group(1))))) + m.group(2)
+        except Exception:
+            return s
+    return s
+
+
 def _fix_pct(v: Any) -> str:
     if v is None or v == "":
         return ""
@@ -619,7 +652,7 @@ def _build_shutuba(
             "人気": _safe_str(raw.get("人気") or pred.get("人気")),
             "斤量": _safe_str(raw.get("斤量") or pred.get("斤量")),
             "性齢": _safe_str(raw.get("性齢") or pred.get("性齢")),
-            "馬体重": _safe_str(raw.get("馬体重") or pred.get("馬体重")),
+            "馬体重": _fmt_bataiju(raw.get("馬体重") if raw.get("馬体重") not in (None, "") else pred.get("馬体重")),
             "推定勝率": _fix_pct(win_p),
             "推定3着内率": _fix_pct(place_p),
             "馬指数": _safe_str(horse_idx),

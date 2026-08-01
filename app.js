@@ -381,6 +381,23 @@
     return "mark-honmei mark-h";
   }
 
+  function formatBataijuDisplay(v) {
+    if (v == null || v === "") return "";
+    const s = String(v).trim();
+    if (!s) return "";
+    if (/^-?\d+(?:\.\d+)?$/.test(s)) {
+      const n = Number(s);
+      if (Number.isFinite(n)) return String(Math.round(n));
+      return s;
+    }
+    const m = s.match(/^(-?\d+(?:\.\d+)?)(.*)$/);
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n)) return String(Math.round(n)) + m[2];
+    }
+    return s;
+  }
+
   function shutubaRowsForDisplay(rows) {
     const list = Array.isArray(rows) ? rows.slice() : [];
     if (state.shutubaSort !== "umaban") return list;
@@ -429,7 +446,9 @@
         if (st.cancel && (c === "馬名" || c === "単勝")) classes.push("cancel-text");
         if (markCols.has(c) && honmei[c]) classes.push(markHonmeiClass(c));
         const cls = classes.length ? ` class="${classes.join(" ")}"` : "";
-        html += `<td${cls}${styleAttr}>${escapeHtml(row[c] ?? "")}</td>`;
+        let cellVal = row[c] ?? "";
+        if (c === "馬体重") cellVal = formatBataijuDisplay(cellVal);
+        html += `<td${cls}${styleAttr}>${escapeHtml(cellVal)}</td>`;
       }
       html += "</tr>";
     }

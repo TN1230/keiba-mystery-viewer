@@ -32,6 +32,16 @@ class DayRowsTests(unittest.TestCase):
 
 
 class StandaloneBuildTests(unittest.TestCase):
+    def test_fmt_bataiju_integer(self) -> None:
+        from standalone_publish_from_cache import _fmt_bataiju
+
+        self.assertEqual(_fmt_bataiju(528.0), "528")
+        self.assertEqual(_fmt_bataiju("486.0"), "486")
+        self.assertEqual(_fmt_bataiju(480), "480")
+        self.assertEqual(_fmt_bataiju("480(+4)"), "480(+4)")
+        self.assertEqual(_fmt_bataiju(""), "")
+        self.assertEqual(_fmt_bataiju(None), "")
+
     def test_rejects_gate_threshold_score_25(self) -> None:
         from standalone_publish_from_cache import _extract_holmes_score
 
@@ -112,7 +122,7 @@ class StandaloneBuildTests(unittest.TestCase):
                         "人気": 1,
                         "斤量": 55,
                         "性齢": "牡2",
-                        "馬体重": 450,
+                        "馬体重": 450.0,
                     },
                     {
                         "枠番": 1,
@@ -141,6 +151,7 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertTrue(race["shutuba"]["rows"])
         # default order = higher 推定3着内率 first (馬番4)
         self.assertEqual(race["shutuba"]["rows"][0]["馬番"], "4")
+        self.assertEqual(race["shutuba"]["rows"][0]["馬体重"], "450")
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 
