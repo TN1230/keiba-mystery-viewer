@@ -37,7 +37,8 @@ window.PUBLIC_VIEWER_CONFIG = {
    * 使える置換: {race_id} {place}/{venue} {R}/{race_no} {schedule_date}/{kaisai_date}
    * 空文字のとき: discovery JSON の tenkai_sim_url_template →
    *   tenkai_sim_base_url → ADMIN API base + "/tenkai?race_id={race_id}"
-   * 例: "https://example.trycloudflare.com/tenkai?race_id={race_id}"
+   * LAN 導入: tools/yokuumakun_tenkai_sim_launch/deploy_from_windows.ps1
+   *   → discovery に tenkai_sim_url_template が入り、ここは空のままでよい。
    */
   TENKAI_SIM_URL_TEMPLATE: "",
   // --- END TEMP: TENKAI_SIM_LAUNCH ---
