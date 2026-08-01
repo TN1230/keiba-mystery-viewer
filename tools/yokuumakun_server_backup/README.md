@@ -2,11 +2,26 @@
 
 `/opt/yokuumakun_auto-x` の現時点スナップショットを、**毎週バックアップと同じ保存先**へ作成します。
 
-## Windows LAN から実行（推奨）
+## サーバー上で実行（いま SSH している場合はこちら）
+
+`tn@tn1230server` の bash に貼り付けてください（PowerShell / `C:\...` は不要です）。
+
+```bash
+cd /tmp
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/server-auto-x-backup-19c2/tools/yokuumakun_server_backup/backup_auto_x_on_server.sh -o backup_auto_x_on_server.sh
+chmod +x backup_auto_x_on_server.sh
+export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+# /opt 配下にディレクトリ作成が必要なときだけ:
+# export YOKUMAKUN_SUDO_PASS='（sudo パスワード）'
+bash ./backup_auto_x_on_server.sh
+```
+
+成功すると `OK output=...` と保存先一覧が出ます。
+
+## Windows LAN から実行
 
 ```powershell
 cd C:\Users\tn\Desktop\keiba-mystery-viewer\tools\yokuumakun_server_backup
-# リポジトリ未取得なら main を pull してから:
 powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 ```
 
@@ -27,16 +42,4 @@ powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 - `yokuumakun_auto-x_manual_now_YYYYMMDD_HHMMSS.tar.gz`
 - 同名の `.manifest.txt`
 
-既定では `.venv` / `__pycache__` / `.git` を除外します（`.env` や CSV・コードは含めます）。venv も入れる場合:
-
-```powershell
-$env:YOKUMAKUN_BACKUP_INCLUDE_VENV = "1"
-powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
-```
-
-## サーバー直実行
-
-```bash
-export YOKUMAKUN_SUDO_PASS='…'   # /opt 配下作成が必要なとき
-bash tools/yokuumakun_server_backup/backup_auto_x_on_server.sh
-```
+既定では `.venv` / `__pycache__` / `.git` を除外します（`.env` や CSV・コードは含めます）。venv も入れる場合は `export YOKUMAKUN_BACKUP_INCLUDE_VENV=1`。
