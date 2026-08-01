@@ -5,7 +5,7 @@
 #  3) 明日以降の保険として systemd timer を入れる
 set -uo pipefail
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/viewer-publish-lag-immediate-19c2}"
+BRANCH="${1:-cursor/race-summary-course-distance-19c2}"
 BASE_RAW="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_lan_site_publish"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 export YOKUMAKUN_SUDO_PASS="$SUDO_PASS"

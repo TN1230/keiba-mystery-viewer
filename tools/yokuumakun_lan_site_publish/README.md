@@ -13,20 +13,19 @@
 1. **今すぐ** キャッシュから `latest.json` を強制公開（空 snapshot は成功にしない）
 2. **朝一斉ワーカー**成功時に自動 publish（恒久パッチ）
 3. **直前予想ワーカー**成功時（`update_races_cache_entry` 直後）に自動 publish（恒久パッチ）
-   - 公開 race に `course` / `distance` / `course_label`（例: `ダート1000m（右）`）を載せる
-3b. （番号維持）
-4. **systemd timer**（05:30 起動後 **30秒ごと**）で
+4. 公開 race に `course` / `distance` / `course_label`（例: `ダート1000m（右）`）を載せる
+5. **systemd timer**（05:30 起動後 **30秒ごと**）で
    - latest が空/前日
    - またはキャッシュの `predicted_at` が公開より新しい（max / race_id 単位）
    - または直前窓のレースが朝の予想のまま（他レースの直近 publish でもスキップしない）
    - または publish 失敗で立った **pending** フラグ
    なら再 publish
-5. **publish 失敗時は即時 wake**: `viewer_publish_wake.py` が pending を書き、
+6. **publish 失敗時は即時 wake**: `viewer_publish_wake.py` が pending を書き、
    timer を待たず `yokuum-morning-publish-watch.service` を oneshot 起動。
    発走間近は「【異常・発走間近】」として通知し、未解消なら直後に再試行する
    （馬券購入時間を確保するため）。
-6. admin の `IndentationError` 時はバックアップから自動復旧
-7. 管理画面「② 閲覧サイト強制公開」＋ `POST /admin/remote-bootstrap` の
+7. admin の `IndentationError` 時はバックアップから自動復旧
+8. 管理画面「② 閲覧サイト強制公開」＋ `POST /admin/remote-bootstrap` の
    `install_lan_site_publish` / `force_publish`
 
 ## 今すぐレースをサイトへ反映 / 品質修復（最短）
