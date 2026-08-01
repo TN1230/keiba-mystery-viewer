@@ -607,7 +607,7 @@
     }
     return (
       `ホームズ推奨: <span class="holmes-recommend">` +
-      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="28" height="28" decoding="async" />` +
+      `<img class="logic-cast-icon holmes-recommend-icon" src="${escapeAttr(icon)}" alt="" width="34" height="34" decoding="async" />` +
       `<strong>${escapeHtml(label)}</strong></span>`
     );
   }

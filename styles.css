@@ -554,8 +554,9 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
 .logic-cast-icon {
   display: block;
   flex: 0 0 auto;
-  width: 2.5rem;
-  height: 2.5rem;
+  /* 従来 2.5rem から縦横比維持で 20% 拡大 */
+  width: 3rem;
+  height: 3rem;
   margin-top: 0.1rem;
   border-radius: 50%;
   object-fit: cover;
@@ -960,8 +961,9 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   vertical-align: middle;
 }
 .holmes-recommend-icon {
-  width: 1.75rem;
-  height: 1.75rem;
+  /* 従来 1.75rem から縦横比維持で 20% 拡大 */
+  width: 2.1rem;
+  height: 2.1rem;
   margin-top: 0;
 }
 html.hide-cast-icons .holmes-recommend-icon {
