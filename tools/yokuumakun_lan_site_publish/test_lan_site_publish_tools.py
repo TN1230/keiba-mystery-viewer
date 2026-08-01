@@ -144,6 +144,69 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 
+class HolmesOfficialApiTests(unittest.TestCase):
+    def test_invoke_build_public_snapshot_uses_races_kwarg(self) -> None:
+        """Server dump: build_public_snapshot(*, races, day_rows, schedule_date=None)."""
+        from official_republish_from_cache import _invoke_build_public_snapshot
+        import types
+
+        seen: dict = {}
+
+        def build_public_snapshot(*, races, day_rows, schedule_date=None):
+            seen["races"] = races
+            seen["day_rows"] = day_rows
+            seen["schedule_date"] = schedule_date
+            return {
+                "schema_version": 3,
+                "race_count": len(day_rows),
+                "venues": [],
+                "schedule_date": schedule_date,
+            }
+
+        mod = types.SimpleNamespace(build_public_snapshot=build_public_snapshot)
+        races = {"rid1": {"info": {"place": "札幌", "R": 1}}}
+        rows = [types.SimpleNamespace(race_id="rid1", best_score=71)]
+        snap = _invoke_build_public_snapshot(mod, day="2026-08-01", day_rows=rows, races=races)
+        self.assertEqual(seen["schedule_date"], "2026-08-01")
+        self.assertIs(seen["races"], races)
+        self.assertEqual(seen["day_rows"], rows)
+        self.assertEqual(snap["race_count"], 1)
+
+    def test_invoke_ignores_legacy_kwargs_not_in_signature(self) -> None:
+        from official_republish_from_cache import _invoke_build_public_snapshot
+        import types
+
+        def build_public_snapshot(*, races, day_rows, schedule_date=None):
+            return {"ok": True, "n": len(races)}
+
+        mod = types.SimpleNamespace(build_public_snapshot=build_public_snapshot)
+        # Must not TypeError on internal candidates like races_by_id/venues_override
+        snap = _invoke_build_public_snapshot(
+            mod, day="2026-08-01", day_rows=[], races={"a": {}}
+        )
+        self.assertTrue(snap["ok"])
+
+    def test_blank_holmes_ranks_are_pending(self) -> None:
+        from standalone_publish_from_cache import _apply_holmes_ranks
+
+        races = [{"holmes_index": ""}, {"holmes_index": ""}]
+        _apply_holmes_ranks(races)
+        self.assertEqual(races[0]["holmes_rank_text"], "算出前")
+        self.assertIsNone(races[0]["holmes_index_rank"])
+
+    def test_prev_week_ref_range_excludes_bad_constants(self) -> None:
+        from standalone_publish_from_cache import _as_holmes_score, _holmes_valid_range
+        import standalone_publish_from_cache as sp
+
+        sp._holmes_range_cache = None
+        lo, hi = _holmes_valid_range()
+        self.assertLessEqual(lo, 41.0)
+        self.assertGreaterEqual(hi, 90.0)
+        self.assertIsNone(_as_holmes_score(25))
+        self.assertIsNone(_as_holmes_score(5))
+        self.assertEqual(_as_holmes_score(71), 71.0)
+
+
 class KwargsFilterTests(unittest.TestCase):
     def test_filter_drops_unknown_kwargs(self) -> None:
         from official_republish_from_cache import (

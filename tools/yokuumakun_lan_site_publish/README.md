@@ -18,6 +18,10 @@ curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/l
 
 成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数がレースごとに異なる・出馬表が推定3着内率順、を確認。
 
+ホームズ指数は公式経路で Edge `day_rows.best_score` → `_holmes_public_fields` 経由で埋まる（前週 `2026-07-26.json` が良品参照）。
+`official_republish_from_cache.py` はサーバーの `build_public_snapshot(*, races, day_rows, schedule_date)` シグネチャに合わせて呼び出す。
+gate の `score=25` や壊れた日の定数 `5` はホームズ指数として採用しない。
+
 `repair_and_publish.sh` は正式 publish（hwm ヘルパー）を先に試し、品質 OK なら standalone で上書きしない。
 一斉予想の再取得は、キャッシュ自体に `prediction` が無い場合のみ有効。公開品質の問題は publish 経路の修正で足りることが多い。
 

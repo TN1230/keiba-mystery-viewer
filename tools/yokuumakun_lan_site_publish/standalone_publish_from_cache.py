@@ -311,11 +311,58 @@ def _parse_pct_number(v: Any) -> float:
         return -1.0
 
 
+PREV_WEEK_REF_URL = (
+    "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/"
+    "public-viewer/snapshots/2026-07-26.json"
+)
+
+# 誤値として知られる定数（前週 7/25 の 5、gate 閾値 25 など）
+_HOLMES_BAD_CONSTANTS = {0.0, 5.0, 25.0}
+
+_holmes_range_cache: dict[str, float] | None = None
+
+
+def _holmes_valid_range() -> tuple[float, float]:
+    """前週良品スナップを参照して妥当レンジを決める（失敗時は 40..100）。"""
+    global _holmes_range_cache
+    if _holmes_range_cache is not None:
+        return _holmes_range_cache["min"], _holmes_range_cache["max"]
+    lo, hi = 40.0, 100.0
+    try:
+        import re
+        import urllib.request
+
+        with urllib.request.urlopen(PREV_WEEK_REF_URL, timeout=15) as resp:
+            snap = json.load(resp)
+        vals: list[float] = []
+        for v in snap.get("venues") or []:
+            for r in v.get("races") or []:
+                m = re.match(r"([0-9]+(?:\.[0-9]+)?)", str(r.get("holmes_index") or "").strip())
+                if m:
+                    vals.append(float(m.group(1)))
+        # 前週で過半数を占める定数（壊れた日）は除外してレンジ算出
+        if vals:
+            from collections import Counter
+
+            cnt = Counter(vals)
+            mode, n_mode = cnt.most_common(1)[0]
+            use = vals
+            if n_mode >= max(3, len(vals) // 2) and mode in _HOLMES_BAD_CONSTANTS:
+                use = [x for x in vals if x != mode]
+            if use:
+                lo = max(30.0, min(use) - 5.0)
+                hi = min(100.0, max(use) + 2.0)
+    except Exception:
+        pass
+    _holmes_range_cache = {"min": lo, "max": hi}
+    return lo, hi
+
+
 def _as_holmes_score(v: Any) -> float | None:
     """ホームズ指数として妥当な数値だけ通す。
 
     Edge の best_score / gate の score=25 など別用途の値はここで弾く。
-    公開スナップの実測レンジは概ね 40〜100。
+    公開スナップの実測レンジは前週参照で概ね 40〜100。
     """
     if v is None or v == "":
         return None
@@ -325,19 +372,54 @@ def _as_holmes_score(v: Any) -> float | None:
         return None
     if x != x:  # NaN
         return None
-    # 25 は gate 閾値等で全レースに混入しやすい誤値。ホームズ指数としては低すぎる。
-    if x < 40.0 or x > 100.0:
+    if x in _HOLMES_BAD_CONSTANTS:
+        return None
+    lo, hi = _holmes_valid_range()
+    if x < lo or x > hi:
         return None
     return x
+
+
+def _deep_holmes_candidates(obj: Any, *, depth: int = 0, path: str = "") -> list[tuple[str, Any]]:
+    """dict 木からホームズ指数らしいキーだけ拾う（score/index/best_score は除外）。"""
+    if depth > 4 or obj is None:
+        return []
+    out: list[tuple[str, Any]] = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            ks = str(k)
+            p = f"{path}.{ks}" if path else ks
+            kl = ks.lower()
+            # 明示キー優先
+            if kl in (
+                "holmes_index",
+                "morning_holmes_index",
+                "morning_holmes_best_score",
+                "holmes_score",
+                "holmes_best_score",
+            ):
+                out.append((p, v))
+            elif "holmes" in kl and any(t in kl for t in ("index", "score", "best")):
+                if kl not in ("holmes", "score", "index", "best_score"):
+                    out.append((p, v))
+            if isinstance(v, (dict, list, tuple)):
+                out.extend(_deep_holmes_candidates(v, depth=depth + 1, path=p))
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(list(obj)[:20]):
+            out.extend(_deep_holmes_candidates(v, depth=depth + 1, path=f"{path}[{i}]"))
+    return out
 
 
 def _extract_holmes_score(rinfo: dict[str, Any], rid: str | None = None) -> float | None:
     """正式ヘルパー / morning フィールドからホームズ指数を取る。
 
     禁止:
-    - holmes_gate_predict_snap の雑 walk
+    - gate の score / index（閾値 25 等）
     - Edge row / rinfo の generic best_score（別指標で 25 になりがち）
-    - gate の score / index / holmes
+    許可:
+    - 明示の holmes_index 系
+    - 正式 hwm / export ヘルパー
+    - gate 内の明示ホームズキー（深いネスト含む）
     """
     # 1) 正式: hwm の指数ヘルパー
     if rid:
@@ -357,6 +439,7 @@ def _extract_holmes_score(rinfo: dict[str, Any], rid: str | None = None) -> floa
         "holmes_index",
         "holmes_score",
         "morning_holmes_index",
+        "holmes_best_score",
     ):
         got = _as_holmes_score(rinfo.get(key))
         if got is not None:
@@ -376,15 +459,55 @@ def _extract_holmes_score(rinfo: dict[str, Any], rid: str | None = None) -> floa
     except Exception:
         pass
 
-    # 4) gate snap: 明示のホームズ指数キーのみ（score/index 禁止）
+    # 4) gate snap: 明示のホームズ指数キーのみ（score/index 禁止）。深いネストも見る。
     gate = rinfo.get("holmes_gate_predict_snap")
     if isinstance(gate, dict):
-        for key in ("holmes_index", "morning_holmes_best_score", "holmes_score"):
+        for key in ("holmes_index", "morning_holmes_best_score", "holmes_score", "holmes_best_score"):
             if key in gate:
                 got = _as_holmes_score(gate[key])
                 if got is not None:
                     return got
+        for _path, val in _deep_holmes_candidates(gate):
+            got = _as_holmes_score(val)
+            if got is not None:
+                return got
+
+    # 5) 正式 export ヘルパー: Edge best_score でも _holmes_public_fields 経由なら採用可
+    #    （前週経路と同じ。ただし単独の 25 は _as_holmes_score で落ちる）
+    try:
+        from public_viewer.export_public_snapshot import _holmes_public_fields  # type: ignore
+
+        morning = None
+        for key in ("morning_holmes_best_score", "morning_holmes_index", "holmes_index"):
+            if rinfo.get(key) is not None:
+                morning = rinfo.get(key)
+                break
+        latest = rinfo.get("best_score")
+        fields = _holmes_public_fields(latest if latest is not None else 0.0, morning)
+        if isinstance(fields, dict):
+            got = _as_holmes_score(fields.get("holmes_index"))
+            if got is not None:
+                return got
+    except Exception:
+        pass
     return None
+
+
+def _gate_diag(gate: Any) -> dict[str, Any]:
+    if not isinstance(gate, dict):
+        return {"type": type(gate).__name__}
+    keys = sorted(str(k) for k in gate.keys())
+    shallow = {}
+    for k in keys[:24]:
+        v = gate.get(k)
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            shallow[k] = v
+        else:
+            shallow[k] = type(v).__name__
+    cands = []
+    for p, v in _deep_holmes_candidates(gate)[:12]:
+        cands.append({"path": p, "value": v if isinstance(v, (str, int, float, bool)) else type(v).__name__})
+    return {"type": "dict", "keys": keys, "shallow": shallow, "holmes_candidates": cands}
 
 
 def _fix_pct(v: Any) -> str:
@@ -671,13 +794,23 @@ def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _apply_holmes_ranks(races: list[dict[str, Any]]) -> None:
-    scored: list[tuple[float, dict[str, Any]]] = []
+    scored: list[tuple[float | None, dict[str, Any]]] = []
     for r in races:
+        hi = str(r.get("holmes_index") or "").strip()
+        if not hi:
+            scored.append((None, r))
+            continue
         try:
-            scored.append((float(r.get("holmes_index") or 0), r))
+            scored.append((float(hi), r))
         except Exception:
-            scored.append((0.0, r))
-    scored.sort(key=lambda x: x[0], reverse=True)
+            scored.append((None, r))
+    # 全レース未算出なら前週/正式と同じく「算出前」（連番順位を捏造しない）
+    if scored and all(s is None for s, _ in scored):
+        for _s, r in scored:
+            r["holmes_index_rank"] = None
+            r["holmes_rank_text"] = "算出前"
+        return
+    scored.sort(key=lambda x: (-1.0 if x[0] is None else -float(x[0]),))
     n = len(scored)
     for i, (_score, r) in enumerate(scored, start=1):
         r["holmes_index_rank"] = i
@@ -741,7 +874,39 @@ def _top5(races: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _collect_edge_best_scores(races_cache: dict[str, Any]) -> dict[str, float]:
+    """可能なら Edge day_rows の best_score を集める（前週公式経路と同系統）。"""
+    out: dict[str, float] = {}
+    try:
+        # marks_baker ドリフト対策（official と同じパッチを流用）
+        try:
+            from official_republish_from_cache import (  # type: ignore
+                _patch_build_race_edge_row_kwargs,
+            )
+
+            _patch_build_race_edge_row_kwargs()
+        except Exception:
+            pass
+        from hwm import _collect_day_edge_rows_from_races  # type: ignore
+
+        rows = list(_collect_day_edge_rows_from_races(races_cache) or [])
+        for row in rows:
+            rid = str(getattr(row, "race_id", "") or "")
+            if not rid:
+                continue
+            try:
+                out[rid] = float(getattr(row, "best_score"))
+            except Exception:
+                continue
+    except Exception:
+        return out
+    return out
+
+
 def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
+    # 前週参照レンジを先に温める
+    _holmes_valid_range()
+
     morning_map: dict[str, Any] = {}
     try:
         from public_viewer.export_public_snapshot import _morning_holmes_score_map  # type: ignore
@@ -765,24 +930,58 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
     except Exception:
         pass
 
+    edge_best = _collect_edge_best_scores(races_cache)
+    hfields_fn = None
+    try:
+        from public_viewer.export_public_snapshot import _holmes_public_fields  # type: ignore
+
+        hfields_fn = _holmes_public_fields
+    except Exception:
+        hfields_fn = None
+
     public_races: list[dict[str, Any]] = []
     skipped = 0
     for rid in sorted(races_cache.keys(), key=str):
         rinfo = races_cache[rid]
-        if isinstance(rinfo, dict) and rid in morning_map and rinfo.get("holmes_index") in (None, ""):
-            got = _as_holmes_score(morning_map[rid])
-            if got is not None:
-                rinfo = dict(rinfo)
-                rinfo["holmes_index"] = got
-        pub = _race_to_public(str(rid), rinfo)
+        if isinstance(rinfo, dict):
+            rinfo = dict(rinfo)
+            if rid in morning_map and rinfo.get("holmes_index") in (None, ""):
+                got = _as_holmes_score(morning_map[rid])
+                if got is not None:
+                    rinfo["holmes_index"] = got
+            if rid in edge_best and "best_score" not in rinfo:
+                rinfo["best_score"] = edge_best[rid]
+        pub = _race_to_public(str(rid), rinfo if isinstance(rinfo, dict) else {})
         if pub is None:
             skipped += 1
             continue
-        if rid in morning_map and not pub.get("holmes_index"):
-            got = _as_holmes_score(morning_map[rid])
-            if got is not None:
-                pub["holmes_index"] = str(int(round(got)))
-                pub["morning_holmes_index"] = pub["holmes_index"]
+        if not pub.get("holmes_index"):
+            morning = morning_map.get(rid)
+            latest = edge_best.get(rid)
+            filled = False
+            if callable(hfields_fn):
+                try:
+                    fields = hfields_fn(latest if latest is not None else 0.0, morning)
+                    if isinstance(fields, dict):
+                        got = _as_holmes_score(fields.get("holmes_index"))
+                        if got is not None:
+                            pub["holmes_index"] = str(int(round(got)))
+                            mh = fields.get("morning_holmes_index")
+                            pub["morning_holmes_index"] = (
+                                str(mh) if mh not in (None, "") else pub["holmes_index"]
+                            )
+                            if fields.get("holmes_index_display"):
+                                pub["holmes_index_display"] = fields.get("holmes_index_display")
+                            filled = True
+                except Exception:
+                    filled = False
+            if not filled:
+                for cand in (morning, latest):
+                    got = _as_holmes_score(cand)
+                    if got is not None:
+                        pub["holmes_index"] = str(int(round(got)))
+                        pub["morning_holmes_index"] = pub["holmes_index"]
+                        break
         public_races.append(pub)
     _apply_holmes_ranks(public_races)
 
@@ -875,17 +1074,19 @@ def run() -> dict[str, Any]:
     # sample diag
     rid0 = sorted(races.keys(), key=str)[0]
     r0 = races[rid0]
+    lo, hi = _holmes_valid_range()
     sample = {
         "id": rid0,
         "keys": sorted(str(k) for k in r0.keys()) if isinstance(r0, dict) else type(r0).__name__,
         "info_keys": sorted(str(k) for k in _info(r0).keys()) if isinstance(r0, dict) else [],
         "has_df": isinstance(r0, dict) and r0.get("df") is not None,
         "has_prediction": isinstance(r0, dict) and r0.get("prediction") is not None,
-        "holmes_gate_type": type(r0.get("holmes_gate_predict_snap")).__name__ if isinstance(r0, dict) else None,
+        "holmes_gate": _gate_diag(r0.get("holmes_gate_predict_snap")) if isinstance(r0, dict) else None,
         "extracted_holmes": _extract_holmes_score(r0, rid0) if isinstance(r0, dict) else None,
         "dev_fmt": _fmt_dev(r0.get("dev")) if isinstance(r0, dict) else None,
+        "holmes_range_ref": {"min": lo, "max": hi, "url": PREV_WEEK_REF_URL},
     }
-    notes.append(f"sample={json.dumps(sample, ensure_ascii=False, default=str)[:800]}")
+    notes.append(f"sample={json.dumps(sample, ensure_ascii=False, default=str)[:1600]}")
 
     snap = build_snapshot(races, day)
     if int(snap.get("race_count") or 0) <= 0:

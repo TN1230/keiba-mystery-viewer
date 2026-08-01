@@ -299,7 +299,224 @@ def _try_direct_build_race_edge_rows(hwm: Any, races: Dict[str, Any]) -> Tuple[L
     return rows, first_err
 
 
-def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
+PREV_WEEK_REF_URL = (
+    "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/"
+    "public-viewer/snapshots/2026-07-26.json"
+)
+
+
+def _load_prev_week_holmes_ref() -> Dict[str, Any]:
+    """前週（良品）スナップを参照し、ホームズ指数の妥当レンジを得る。"""
+    import re
+    import urllib.request
+
+    out: Dict[str, Any] = {
+        "ok": False,
+        "url": PREV_WEEK_REF_URL,
+        "min": 40.0,
+        "max": 100.0,
+        "n": 0,
+        "unique": 0,
+    }
+    try:
+        with urllib.request.urlopen(PREV_WEEK_REF_URL, timeout=20) as resp:
+            snap = json.load(resp)
+    except Exception as e:
+        out["error"] = repr(e)
+        return out
+    vals: List[float] = []
+    for v in snap.get("venues") or []:
+        for r in v.get("races") or []:
+            hi = str(r.get("holmes_index") or "").strip()
+            m = re.match(r"([0-9]+(?:\.[0-9]+)?)", hi)
+            if not m:
+                continue
+            try:
+                vals.append(float(m.group(1)))
+            except Exception:
+                continue
+    if not vals:
+        out["error"] = "no_holmes_in_ref"
+        return out
+    # 前週の実測からフロアを少し緩める（ただし 25/5 等の誤値は依然弾く側で扱う）
+    lo = max(30.0, min(vals) - 5.0)
+    hi = min(100.0, max(vals) + 2.0)
+    out.update(
+        {
+            "ok": True,
+            "min": lo,
+            "max": hi,
+            "n": len(vals),
+            "unique": len(set(vals)),
+            "sample": vals[:8],
+            "schedule_date": snap.get("schedule_date"),
+            "schema_version": snap.get("schema_version"),
+        }
+    )
+    return out
+
+
+def _invoke_build_public_snapshot(
+    export_mod: Any,
+    *,
+    day: Any,
+    day_rows: List[Any],
+    races: Dict[str, Any],
+) -> Any:
+    """Server export signature drift に耐える build_public_snapshot 呼び出し。
+
+    実サーバー（ops dump）:
+      build_public_snapshot(*, races, day_rows, schedule_date=None)
+    旧想定:
+      races_by_id= / venues_override= / include_top5= / cleared=
+    """
+    fn = getattr(export_mod, "build_public_snapshot")
+    day_s = str(day) if day is not None else None
+    candidates: Dict[str, Any] = {
+        "races": races,
+        "races_by_id": races,
+        "day_rows": day_rows,
+        "schedule_date": day_s,
+        "venues_override": None,
+        "include_top5": True,
+        "cleared": False,
+    }
+    try:
+        sig = inspect.signature(fn)
+        params = sig.parameters
+    except (TypeError, ValueError):
+        # 既知の現行シグネチャ
+        return fn(races=races, day_rows=day_rows, schedule_date=day_s)
+
+    kwargs: Dict[str, Any] = {}
+    for name in params:
+        if name in candidates:
+            kwargs[name] = candidates[name]
+    # races が必須な現行 API で races_by_id だけ渡していた事故を防ぐ
+    if "races" in params and "races" not in kwargs:
+        kwargs["races"] = races
+    if "day_rows" in params and "day_rows" not in kwargs:
+        kwargs["day_rows"] = day_rows
+    if "schedule_date" in params and "schedule_date" not in kwargs:
+        kwargs["schedule_date"] = day_s
+    return fn(**_filter_kwargs_for_callable(fn, kwargs))
+
+
+def _upload_ops_json(export_mod: Any, rel: str, payload: Dict[str, Any]) -> None:
+    try:
+        up = getattr(export_mod, "upload_json_object", None)
+        if callable(up):
+            up(rel, payload)
+    except Exception:
+        pass
+
+
+def _dump_export_helpers(export_mod: Any) -> Dict[str, Any]:
+    import inspect as _inspect
+
+    dumped: Dict[str, Any] = {}
+    for name in (
+        "build_public_snapshot",
+        "_holmes_public_fields",
+        "_morning_holmes_score_map",
+        "_race_public_from_row",
+        "_matrix_row_public",
+    ):
+        fn = getattr(export_mod, name, None)
+        if not callable(fn):
+            continue
+        try:
+            src = _inspect.getsource(fn)
+        except Exception as e:
+            dumped[name] = {"error": repr(e)}
+            continue
+        payload = {
+            "updated_at": str(date.today()),
+            "func": name,
+            "source": src[:120000],
+            "module_file": getattr(export_mod, "__file__", None),
+        }
+        _upload_ops_json(export_mod, f"ops/{name}_source.py.json", payload)
+        dumped[name] = {"bytes": len(src), "file": payload["module_file"]}
+    return dumped
+
+
+def _enrich_snap_holmes_from_helpers(
+    export_mod: Any,
+    snap: Dict[str, Any],
+    races: Dict[str, Any],
+    day_rows: List[Any],
+) -> Dict[str, Any]:
+    """blank ホームズを morning map / Edge best_score + 正式ヘルパーで埋める。"""
+    import re
+
+    morning_map: Dict[str, Any] = {}
+    try:
+        mp_fn = getattr(export_mod, "_morning_holmes_score_map", None)
+        if callable(mp_fn):
+            morning_map = dict(mp_fn(races) or {})
+    except Exception:
+        morning_map = {}
+
+    edge_best: Dict[str, float] = {}
+    for row in day_rows or []:
+        rid = str(getattr(row, "race_id", None) or (row.get("race_id") if isinstance(row, dict) else "") or "")
+        if not rid:
+            continue
+        raw = getattr(row, "best_score", None) if not isinstance(row, dict) else row.get("best_score")
+        try:
+            edge_best[rid] = float(raw)
+        except Exception:
+            continue
+
+    hfields_fn = getattr(export_mod, "_holmes_public_fields", None)
+    filled = 0
+    for v in snap.get("venues") or []:
+        for r in v.get("races") or []:
+            if not isinstance(r, dict):
+                continue
+            hi = str(r.get("holmes_index") or "").strip()
+            if hi:
+                # "25" / "5" など前週参照で明らかに壊れている値は再計算対象
+                m = re.match(r"([0-9]+(?:\.[0-9]+)?)", hi)
+                if m and float(m.group(1)) >= 40.0:
+                    continue
+            rid = str(r.get("race_id") or "")
+            morning = morning_map.get(rid)
+            latest = edge_best.get(rid)
+            fields: Optional[Dict[str, Any]] = None
+            if callable(hfields_fn):
+                try:
+                    fields = hfields_fn(latest if latest is not None else 0.0, morning)
+                except Exception:
+                    fields = None
+            if isinstance(fields, dict) and str(fields.get("holmes_index") or "").strip():
+                for k in (
+                    "holmes_index",
+                    "holmes_index_display",
+                    "morning_holmes_index",
+                    "holmes_index_delta",
+                ):
+                    if k in fields and fields[k] is not None:
+                        r[k] = fields[k]
+                filled += 1
+                continue
+            # ヘルパー無し: morning / edge を直接（40+ のみ）
+            for cand in (morning, latest):
+                try:
+                    x = float(cand)
+                except Exception:
+                    continue
+                if 40.0 <= x <= 100.0:
+                    s = str(int(round(x))) if abs(x - round(x)) < 1e-6 else f"{x:.1f}".rstrip("0").rstrip(".")
+                    r["holmes_index"] = s
+                    r["morning_holmes_index"] = s if morning is not None else r.get("morning_holmes_index")
+                    filled += 1
+                    break
+    return {"filled": filled, "morning_map_n": len(morning_map), "edge_best_n": len(edge_best)}
+
+
+def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     import re
 
     races = []
@@ -320,6 +537,10 @@ def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
         holmes_vals.append(m.group(1) if m else "")
     blank_h = sum(1 for h in holmes_vals if not h)
     identical_h = len(set(holmes_vals)) <= 1 and len(races) >= 3 and blank_h == 0
+    # 前週良品は unique が多い。identical や 5/25 固定は不合格。
+    bad_const = False
+    if identical_h and holmes_vals and holmes_vals[0] in {"5", "25", "0"}:
+        bad_const = True
     sample = races[0]
     shutuba = sample.get("shutuba") or {}
     rows = shutuba.get("rows") if isinstance(shutuba, dict) else shutuba
@@ -335,6 +556,7 @@ def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
         bad_dev == 0
         and blank_h == 0
         and not identical_h
+        and not bad_const
         and not ordered_by_umaban
         and marks_ok
         and cells_ok
@@ -346,6 +568,7 @@ def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
         "bad_dev": bad_dev,
         "blank_holmes": blank_h,
         "identical_holmes": identical_h,
+        "bad_const_holmes": bad_const,
         "holmes_sample": holmes_vals[:8],
         "ordered_by_umaban": ordered_by_umaban,
         "marks_ok": marks_ok,
@@ -353,6 +576,13 @@ def _quality(snap: Dict[str, Any]) -> Dict[str, Any]:
         "sample_dev": sample.get("dev"),
         "sample_holmes": sample.get("holmes_index") or sample.get("holmes"),
         "sample_shutuba0": rows[0] if rows else None,
+        "prev_week_ref": {
+            "ok": bool(ref and ref.get("ok")),
+            "min": (ref or {}).get("min"),
+            "max": (ref or {}).get("max"),
+            "unique": (ref or {}).get("unique"),
+            "schedule_date": (ref or {}).get("schedule_date"),
+        },
     }
 
 
@@ -499,16 +729,31 @@ def main() -> int:
         "has_rinfo": bool(getattr(sample, "rinfo", None) is not None) if not isinstance(sample, dict) else ("rinfo" in sample),
     }
 
+    # 前週良品スナップを参照（レンジ・unique の目安）
+    ref = _load_prev_week_holmes_ref()
+    out["prev_week_ref"] = _jsonable(ref)
+    out["export_helpers"] = _jsonable(_dump_export_helpers(export_mod))
+
     try:
-        snap = export_mod.build_public_snapshot(  # type: ignore[attr-defined]
-            schedule_date=day,
-            venues_override=None,
-            day_rows=day_rows,
-            races_by_id=races,
-            include_top5=True,
-            cleared=False,
+        # シグネチャ検査（診断）
+        try:
+            out["build_public_snapshot_sig"] = str(inspect.signature(export_mod.build_public_snapshot))
+        except Exception as e:
+            out["build_public_snapshot_sig"] = repr(e)
+
+        snap = _invoke_build_public_snapshot(
+            export_mod, day=day, day_rows=day_rows, races=races
         )
-        q = _quality(snap if isinstance(snap, dict) else {})
+        if not isinstance(snap, dict):
+            out["error"] = f"build_public_snapshot returned {type(snap)}"
+            _upload_ops_json(export_mod, "ops/official_republish_last.json", out)
+            print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
+            return 6
+
+        enrich = _enrich_snap_holmes_from_helpers(export_mod, snap, races, day_rows)
+        out["attempts"].append({"via": "enrich_holmes_from_helpers", **enrich})
+
+        q = _quality(snap, ref=ref)
         out["quality"] = q
         if not q.get("ok"):
             out["error"] = "built snapshot failed quality checks"
@@ -528,14 +773,17 @@ def main() -> int:
                     "schedule_date": snap.get("schedule_date"),
                 }
             )
+            _upload_ops_json(export_mod, "ops/official_republish_last.json", out)
             print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
             return 0
         out["ok"] = bool(isinstance(up, dict) and up.get("ok") and q.get("ok"))
         out["error"] = out.get("error") or (up.get("error") if isinstance(up, dict) else "upload failed")
+        _upload_ops_json(export_mod, "ops/official_republish_last.json", out)
         print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
         return 1 if not out["ok"] else 0
     except Exception as e:
         out["error"] = repr(e)
+        _upload_ops_json(export_mod, "ops/official_republish_last.json", out)
         print(json.dumps(_jsonable(out), ensure_ascii=False, indent=2))
         return 6
 
