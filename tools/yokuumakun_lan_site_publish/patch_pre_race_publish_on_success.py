@@ -95,6 +95,7 @@ def _copy_helpers(root: Path) -> None:
         "force_publish_public_snapshot.py",
         "viewer_publish_wake.py",
         "race_course_distance.py",
+        "race_pace_label.py",
     ):
         src = here / name
         dst = root / name

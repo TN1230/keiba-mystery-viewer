@@ -827,6 +827,35 @@ class H:
             self.assertEqual(text2.count("def _handle_remote_bootstrap"), 1)
 
 
+class PaceLabelTests(unittest.TestCase):
+    def test_normalize_known_labels(self) -> None:
+        from race_pace_label import normalize_pace_label
+
+        self.assertEqual(normalize_pace_label("やや遅"), "やや遅")
+        self.assertEqual(normalize_pace_label("ペース:中"), "中")
+        self.assertEqual(normalize_pace_label("予想ペース:やや速"), "やや速")
+
+    def test_extract_from_stored_field(self) -> None:
+        from race_pace_label import extract_pace_fields
+
+        fields = extract_pace_fields({}, {"pace_label": "やや遅"})
+        self.assertEqual(fields["pace_label"], "やや遅")
+        self.assertEqual(fields["pace_display"], "予想ペース: やや遅")
+
+    def test_enrich_snapshot_pace(self) -> None:
+        from race_pace_label import enrich_snapshot_with_pace_label
+
+        snap = {
+            "venues": [
+                {"races": [{"race_id": "202601010304", "place": "札幌", "R": "4"}]}
+            ]
+        }
+        cache = {"202601010304": {"pace_label": "やや遅", "info": {}}}
+        n = enrich_snapshot_with_pace_label(snap, cache)
+        self.assertEqual(n, 1)
+        self.assertEqual(snap["venues"][0]["races"][0]["pace_label"], "やや遅")
+
+
 class CourseDistanceTests(unittest.TestCase):
     def test_format_dirt_with_division(self) -> None:
         from race_course_distance import extract_course_distance_fields

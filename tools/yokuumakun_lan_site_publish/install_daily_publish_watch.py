@@ -19,6 +19,7 @@ def main() -> int:
         "patch_pre_race_publish_on_success.py",
         "viewer_publish_wake.py",
         "race_course_distance.py",
+        "race_pace_label.py",
     ):
         src = here / name
         dst = root / name

@@ -962,6 +962,9 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.race-detail .race-pace strong {
+  font-weight: 700;
+}
 .holmes-recommend {
   display: inline-flex;
   align-items: center;

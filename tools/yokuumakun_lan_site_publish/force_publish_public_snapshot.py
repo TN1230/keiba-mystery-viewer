@@ -233,6 +233,12 @@ def _publish_via_export(
         enriched = enrich_snapshot_with_course_distance(snap, races)
     except Exception:
         enriched = 0
+    try:
+        from race_pace_label import enrich_snapshot_with_pace_label
+
+        pace_enriched = enrich_snapshot_with_pace_label(snap, races)
+    except Exception:
+        pace_enriched = 0
     meta = {
         "via": "export_upload",
         "schedule_date": day,
@@ -242,6 +248,7 @@ def _publish_via_export(
         "day_rows_n": len(day_rows or []),
         "day_rows_is_none": day_rows is None,
         "course_distance_enriched": enriched,
+        "pace_label_enriched": pace_enriched,
     }
     if not _snap_ok(snap, len(races)):
         meta["ok"] = False

@@ -13,7 +13,8 @@
 1. **今すぐ** キャッシュから `latest.json` を強制公開（空 snapshot は成功にしない）
 2. **朝一斉ワーカー**成功時に自動 publish（恒久パッチ）
 3. **直前予想ワーカー**成功時（`update_races_cache_entry` 直後）に自動 publish（恒久パッチ）
-4. 公開 race に `course` / `distance` / `course_label`（例: `ダート1000m（右）`）を載せる
+4. 公開 race に `course` / `distance` / `course_label`（例: `ダート1000m（右）`）と
+   `pace_label`（例: `やや遅`）を載せる
 5. **systemd timer**（05:30 起動後 **30秒ごと**）で
    - latest が空/前日
    - またはキャッシュの `predicted_at` が公開より新しい（max / race_id 単位）
@@ -31,7 +32,7 @@
 ## 今すぐレースをサイトへ反映 / 品質修復（最短）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-course-distance-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-pace-label-19c2/tools/yokuumakun_lan_site_publish/repair_and_publish.sh | bash
 ```
 
 成功時は `QUALITY_OK` と、偏差が小数1桁・ホームズ指数がレースごとに異なる・出馬表が推定3着内率順、を確認。
@@ -46,7 +47,7 @@ gate の `score=25` や壊れた日の定数 `5` はホームズ指数として�
 ## サーバーで実行（恒久パッチ込み）
 ```bash
 export YOKUMAKUN_SUDO_PASS='83670824'
-curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-course-distance-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
+curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-summary-pace-label-19c2/tools/yokuumakun_lan_site_publish/bootstrap_on_server.sh | bash | tee /tmp/lan_site_publish.log
 ```
 
 ## Windows LAN（先週と同じ paramiko）

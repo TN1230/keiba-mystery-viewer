@@ -5,7 +5,7 @@
 #  3) 明日以降の保険として systemd timer を入れる
 set -uo pipefail
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/race-summary-course-distance-19c2}"
+BRANCH="${1:-cursor/race-summary-pace-label-19c2}"
 BASE_RAW="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_lan_site_publish"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 export YOKUMAKUN_SUDO_PASS="$SUDO_PASS"
@@ -44,6 +44,7 @@ for f in \
   patch_pre_race_publish_on_success.py \
   viewer_publish_wake.py \
   race_course_distance.py \
+  race_pace_label.py \
   install_publish_endpoint.py \
   install_remote_bootstrap_endpoint.py \
   morning_bulk_publish_watch.py \
@@ -98,11 +99,12 @@ echo "install_remote_bootstrap rc=$?"
 cp -f "$TMP/morning_bulk_publish_watch.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/viewer_publish_wake.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/race_course_distance.py" "$ROOT/" 2>/dev/null || true
+cp -f "$TMP/race_pace_label.py" "$ROOT/" 2>/dev/null || true
 mkdir -p "$ROOT/server_deployment"
 cp -f "$TMP"/yokuum-morning-publish-watch.*.example "$ROOT/server_deployment/" 2>/dev/null || true
 cd "$ROOT"
 set +e
-.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py viewer_publish_wake.py race_course_distance.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
+.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py viewer_publish_wake.py race_course_distance.py race_pace_label.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
 echo "py_compile_tools rc=$?"
 .venv/bin/python -m py_compile admin_panel_api.py
 ADMIN_COMPILE=$?

@@ -1005,6 +1005,12 @@ def _race_to_public(
             "course_division": "",
             "course_label": "",
         }
+    try:
+        from race_pace_label import extract_pace_fields
+
+        pace_fields = extract_pace_fields(info, rinfo)
+    except Exception:
+        pace_fields = {"pace_label": "", "pace_display": ""}
 
     return {
         "race_id": _safe_str(rid),
@@ -1018,6 +1024,8 @@ def _race_to_public(
         "distance": course_fields.get("distance") or "",
         "course_division": course_fields.get("course_division") or "",
         "course_label": course_fields.get("course_label") or "",
+        "pace_label": pace_fields.get("pace_label") or "",
+        "pace_display": pace_fields.get("pace_display") or "",
         "dev": _fmt_dev(rinfo.get("dev")),
         "rank": rinfo.get("rank"),
         "holmes_index": holmes,
@@ -1189,6 +1197,12 @@ def _try_build_snapshot_via_export(races_cache: dict[str, Any], day: str) -> dic
         enrich_snapshot_with_course_distance(snap, races_cache)
     except Exception:
         pass
+    try:
+        from race_pace_label import enrich_snapshot_with_pace_label
+
+        enrich_snapshot_with_pace_label(snap, races_cache)
+    except Exception:
+        pass
     return snap
 
 
@@ -1350,6 +1364,12 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         from race_course_distance import enrich_snapshot_with_course_distance
 
         enrich_snapshot_with_course_distance(snap_out, races_cache)
+    except Exception:
+        pass
+    try:
+        from race_pace_label import enrich_snapshot_with_pace_label
+
+        enrich_snapshot_with_pace_label(snap_out, races_cache)
     except Exception:
         pass
     return snap_out
