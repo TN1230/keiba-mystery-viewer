@@ -1,0 +1,14 @@
+[Unit]
+Description=Timer: publish public snapshot after morning bulk / pre-race if stale
+
+[Timer]
+# 直前は発走約15分前更新。30分間隔だと取りこぼすため、開催帯は2分ごと。
+# 05:30 に起動した後 OnUnitActiveSec で継続。スクリプト側が不要時は noop。
+OnCalendar=*-*-* 05:30:00
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=yokuum-morning-publish-watch.service
+
+[Install]
+WantedBy=timers.target

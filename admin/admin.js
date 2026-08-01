@@ -17,6 +17,7 @@
   const sessionHint = document.getElementById("sessionHint");
   const loginBtn = document.getElementById("loginBtn");
   const btnMorningBulk = document.getElementById("btnMorningBulk");
+  const btnForcePublish = document.getElementById("btnForcePublish");
   const btnModemReboot = document.getElementById("btnModemReboot");
   const btnOpsLogs = document.getElementById("btnOpsLogs");
   const btnLogout = document.getElementById("btnLogout");
@@ -142,6 +143,8 @@
       admin_login: "ログイン",
       admin_logout: "ログアウト",
       admin_morning_bulk_rerun: "一斉予想再実行",
+      admin_publish_public_snapshot: "閲覧サイト強制公開",
+      admin_remote_bootstrap: "リモート bootstrap",
       admin_modem_reboot: "モデム再起動",
     };
     return map[event] || event || "(不明)";
@@ -429,6 +432,60 @@
       "一斉予想を再実行します。ログアウト後もサーバー上で処理は継続します。よろしいですか？"
     );
   });
+
+  if (btnForcePublish) {
+    btnForcePublish.addEventListener("click", async () => {
+      const ok = window.confirm(
+        "キャッシュから閲覧サイト（latest.json）を強制公開します。直前予想の取りこぼし解消に使います。よろしいですか？"
+      );
+      if (!ok) return;
+      setStatus(menuStatus, "実行中…");
+      btnForcePublish.disabled = true;
+      try {
+        const token = getToken();
+        if (!token) {
+          await forceLogout("セッションがありません。再ログインしてください。");
+          return;
+        }
+        let { res, data } = await api("/admin/publish-public-snapshot", {
+          method: "POST",
+          token,
+        });
+        // エンドポイント未導入時は remote-bootstrap の force_publish にフォールバック
+        if (res.status === 404) {
+          ({ res, data } = await api("/admin/remote-bootstrap", {
+            method: "POST",
+            token,
+            body: { action: "force_publish" },
+          }));
+        }
+        if (res.status === 401) {
+          await forceLogout(
+            "セッションが切れました。開始済みの処理はサーバー上で継続している場合があります。再ログインしてください。"
+          );
+          return;
+        }
+        if (!res.ok || !data.ok) {
+          setStatus(
+            menuStatus,
+            data.message || data.error || "強制公開に失敗しました",
+            "error"
+          );
+          return;
+        }
+        const raceCount = data.race_count ?? data.result?.race_count;
+        const msg =
+          raceCount != null
+            ? `公開しました（race_count=${raceCount}）`
+            : data.message || "閲覧サイトを公開しました";
+        setStatus(menuStatus, msg, "ok");
+      } catch (e) {
+        setStatus(menuStatus, e.message || String(e), "error");
+      } finally {
+        btnForcePublish.disabled = false;
+      }
+    });
+  }
 
   btnModemReboot.addEventListener("click", () => {
     runAction(
