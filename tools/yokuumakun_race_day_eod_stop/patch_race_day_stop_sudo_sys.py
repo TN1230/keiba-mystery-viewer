@@ -18,6 +18,27 @@ BEGIN_SUDO = "# BEGIN sudo_sys_race_day_stop"
 END_SUDO = "# END sudo_sys_race_day_stop"
 BEGIN_ENV = "# BEGIN load_env_race_day_stop"
 END_ENV = "# END load_env_race_day_stop"
+BEGIN_CLEAR = "# BEGIN clear_latest_after_stop"
+END_CLEAR = "# END clear_latest_after_stop"
+
+CLEAR_LATEST_BLOCK = f"""
+{BEGIN_CLEAR}
+# publish-watch 埋め戻し対策: latest を cleared 表示へ（失敗しても stop 自体は成功扱い）
+CLEAR_PY="${{ROOT}}/clear_latest_public_snapshot.py"
+if [[ -f "$CLEAR_PY" ]]; then
+  PYBIN="${{ROOT}}/.venv/bin/python"
+  [[ -x "$PYBIN" ]] || PYBIN="$(command -v python3 || true)"
+  if [[ -n "$PYBIN" ]]; then
+    log "INFO: clear_latest_public_snapshot.py を実行します"
+    set +e
+    (cd "$ROOT" && "$PYBIN" -u "$CLEAR_PY") >>"$LOG_FILE" 2>&1
+    clear_rc=$?
+    set -e
+    log "INFO: clear_latest rc=${{clear_rc}}"
+  fi
+fi
+{END_CLEAR}
+"""
 
 SUDO_SYS_FN = f"""
 {BEGIN_SUDO}
@@ -94,7 +115,23 @@ def patch_text(text: str) -> tuple[str, str]:
     elif "sudo_sys systemctl" not in new:
         return text, "error:no_sudo_systemctl_lines"
 
-    if not changed and BEGIN_SUDO in text and BEGIN_ENV in text and "sudo_sys systemctl" in text:
+    if BEGIN_CLEAR not in new:
+        # DONE 行の直前、または末尾に clear を挿入
+        m = re.search(r"(?m)^log \"DONE race_day_stop_hwm\"\s*$", new)
+        if m:
+            new = new[: m.start()] + CLEAR_LATEST_BLOCK + "\n" + new[m.start() :]
+            changed = True
+        else:
+            new = new.rstrip() + "\n" + CLEAR_LATEST_BLOCK + "\n"
+            changed = True
+
+    if (
+        not changed
+        and BEGIN_SUDO in text
+        and BEGIN_ENV in text
+        and BEGIN_CLEAR in text
+        and "sudo_sys systemctl" in text
+    ):
         return text, "already"
     return new, "patched" if changed else "already"
 

@@ -12,6 +12,11 @@
 
 `hwm.py` 自体に 20:00 終了判定はありません。停止は上記の外部スケジュールが担当します。
 
+## 公開ページが終了しないときの原因
+
+`publish-watch` が `cleared: true` を「空の latest」と誤認して **force publish で埋め戻す** バグがありました。  
+本ブランチでは 20:00 JST 以降／当日 cleared 時は publish しません。
+
 ## サーバーへの一回適用（これで次回以降ずっと有効）
 
 ```bash
@@ -26,7 +31,15 @@ bootstrap が行うこと:
 3. **systemd timer を enable --now**（本線）
 4. crontab に `CRON_TZ=Asia/Tokyo` + 20:00 行を登録（保険）
 5. `.env` に `YOKUMAKUN_SUDO_PASS` が無ければ追記（次回以降のため）
-6. すでに 20:00 JST 過ぎなら即 stop 実行
+6. `morning_bulk_publish_watch.py` を EOD 再公開しない版へ更新
+7. すでに 20:00 JST 過ぎなら **即 stop + latest クリア**
+
+今すぐ公開終了だけしたい場合（サーバー）:
+
+```bash
+cd /opt/yokuumakun_auto-x
+.venv/bin/python clear_latest_public_snapshot.py
+```
 
 ## 確認
 

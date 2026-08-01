@@ -70,11 +70,16 @@ class AutomationGuardTests(unittest.TestCase):
 
 class StopSudoTests(unittest.TestCase):
     def test_replaces_sudo_and_loads_env(self) -> None:
-        new, status = patch_stop_text(SAMPLE_STOP)
+        from patch_race_day_stop_sudo_sys import BEGIN_CLEAR
+
+        sample = SAMPLE_STOP + '\nlog "DONE race_day_stop_hwm"\n'
+        new, status = patch_stop_text(sample)
         self.assertEqual(status, "patched")
         self.assertIn(BEGIN_SUDO, new)
         self.assertIn(BEGIN_ENV, new)
+        self.assertIn(BEGIN_CLEAR, new)
         self.assertIn("sudo_sys systemctl stop", new)
+        self.assertIn("clear_latest_public_snapshot.py", new)
         self.assertIn('${ROOT}/.env', new)
         self.assertNotRegex(new, r"(?m)^\s*sudo systemctl stop ")
 
