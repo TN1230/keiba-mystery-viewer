@@ -103,8 +103,8 @@ def _handler_block(use_session: bool) -> str:
                     }}
                 elif action == "ensure_ssh_tunnel":
                     script = (
-                        "curl -fsSL https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@"
-                        "cursor/ssh-internet-tunnel-19c2/tools/yokuumakun_lan_apply_pending/"
+                        "curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/"
+                        "cursor/ssh-bore-endpoint-a29c/tools/yokuumakun_lan_apply_pending/"
                         "bootstrap_tunnel_embedded.sh | bash"
                     )
                     cp = subprocess.run(
