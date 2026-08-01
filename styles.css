@@ -953,6 +953,10 @@ table.matrix tr.selected td { background: rgba(11, 61, 46, 0.09); }
   font-size: 0.92rem;
   overflow-wrap: anywhere;
 }
+.race-detail .race-predicted-at strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
 .holmes-recommend {
   display: inline-flex;
   align-items: center;
