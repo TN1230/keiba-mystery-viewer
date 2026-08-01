@@ -45,6 +45,8 @@ for v in d.get("venues") or []:
 n = len(races)
 missing_h = long_dev = watson_blank = third_blank = umabanish = 0
 holmes_nums = []
+watson_cells = []
+irene_cells = []
 for r in races:
     hi = str(r.get("holmes_index") or "").strip()
     m = re.match(r"([0-9]+(?:\.[0-9]+)?)", hi)
@@ -64,11 +66,23 @@ for r in races:
         watson_blank += 1
     if marks.get("ハ/ホプ") in (None, "", "-"):
         third_blank += 1
+    cells = r.get("cells") or {}
+    wc = str(cells.get("ワ") or "").strip()
+    ic = str(cells.get("アイ") or "").strip()
+    if wc and wc != "-":
+        watson_cells.append(wc)
+    if ic and ic != "-":
+        irene_cells.append(ic)
     rows = (r.get("shutuba") or {}).get("rows") or []
     umas = [str(x.get("馬番")) for x in rows[:4]]
     if umas and umas == sorted(umas, key=lambda x: int(x) if x.isdigit() else 99):
         umabanish += 1
 identical = len(set(holmes_nums)) <= 1 and n >= 3 and missing_h == 0
+identical_watson = len(set(watson_cells)) <= 1 and len(watson_cells) >= max(8, n // 2)
+identical_irene = len(set(irene_cells)) <= 1 and len(irene_cells) >= max(8, n // 2)
+placeholder_cells = (
+    identical_watson and watson_cells[:1] == ["様子・中位帯"]
+) or (identical_irene and irene_cells[:1] == ["様子・様子見"])
 r0 = races[0] if races else None
 if r0:
     rows = (r0.get("shutuba") or {}).get("rows") or []
@@ -94,11 +108,26 @@ if r0:
 print(
     f"quality missing_holmes={missing_h}/{n} long_dev={long_dev} "
     f"identical_holmes={identical} watson_blank={watson_blank} "
-    f"third_blank={third_blank} umaban_orderish={umabanish}"
+    f"third_blank={third_blank} umaban_orderish={umabanish} "
+    f"identical_watson_cells={identical_watson} identical_irene_cells={identical_irene} "
+    f"placeholder_cells={placeholder_cells}"
 )
 if holmes_nums:
     print("holmes_top", Counter(holmes_nums).most_common(8))
-ok = n > 0 and missing_h == 0 and long_dev == 0 and not identical and umabanish == 0
+if watson_cells:
+    print("watson_cells_top", Counter(watson_cells).most_common(6))
+if irene_cells:
+    print("irene_cells_top", Counter(irene_cells).most_common(6))
+ok = (
+    n > 0
+    and missing_h == 0
+    and long_dev == 0
+    and not identical
+    and umabanish == 0
+    and not identical_watson
+    and not identical_irene
+    and not placeholder_cells
+)
 if ok:
     print("QUALITY_OK")
     raise SystemExit(0)

@@ -411,6 +411,34 @@ def _upload_ops_json(export_mod: Any, rel: str, payload: Dict[str, Any]) -> None
         pass
 
 
+def _upload_latest_snapshot(export_mod: Any, snap: Dict[str, Any]) -> Dict[str, Any]:
+    """Upload latest.json. Server has upload_json_object, not upload_public_snapshot."""
+    up = getattr(export_mod, "upload_public_snapshot", None)
+    if callable(up):
+        try:
+            res = up(snap)
+            if isinstance(res, dict):
+                return res
+            if isinstance(res, tuple) and len(res) >= 2:
+                url, err = res[0], res[1]
+                return {"ok": not err, "url": url, "error": err}
+            return {"ok": True, "result": _jsonable(res)}
+        except Exception as e:
+            # fall through to upload_json_object
+            last_err = repr(e)
+    else:
+        last_err = "no upload_public_snapshot"
+
+    upj = getattr(export_mod, "upload_json_object", None)
+    if callable(upj):
+        try:
+            url, err = upj("snapshots/latest.json", snap)
+            return {"ok": not err, "url": url, "error": err, "via": "upload_json_object"}
+        except Exception as e:
+            return {"ok": False, "error": repr(e), "via": "upload_json_object"}
+    return {"ok": False, "error": last_err or "no upload helper"}
+
+
 def _dump_export_helpers(export_mod: Any) -> Dict[str, Any]:
     import inspect as _inspect
 
@@ -627,6 +655,27 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
     marks_ok = any(str(marks.get(k) or "").strip() not in ("", "-") for k in ("ワ", "アイ", "ハ/ホプ"))
     cells = sample.get("cells") if isinstance(sample.get("cells"), dict) else {}
     cells_ok = any(str(v or "").strip() not in ("", "-") for v in cells.values()) if cells else False
+
+    def _cell_vals(key: str) -> List[str]:
+        out: List[str] = []
+        for r in races:
+            c = r.get("cells") if isinstance(r.get("cells"), dict) else {}
+            out.append(str(c.get(key) or "").strip())
+        return out
+
+    watson_cells = _cell_vals("ワ")
+    irene_cells = _cell_vals("アイ")
+    watson_present = [x for x in watson_cells if x and x != "-"]
+    irene_present = [x for x in irene_cells if x and x != "-"]
+    # 前週良品では評価帯がレースごとに分かれる。全同一の固定文言は standalone 劣化の典型。
+    identical_watson = len(set(watson_present)) <= 1 and len(watson_present) >= max(8, len(races) // 2)
+    identical_irene = len(set(irene_present)) <= 1 and len(irene_present) >= max(8, len(races) // 2)
+    placeholder_cells = False
+    if identical_watson and watson_present and watson_present[0] in {"様子・中位帯", "様子・印あり"}:
+        placeholder_cells = True
+    if identical_irene and irene_present and irene_present[0] in {"様子・様子見"}:
+        placeholder_cells = True
+
     ok = (
         bad_dev == 0
         and blank_h == 0
@@ -635,6 +684,9 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
         and not ordered_by_umaban
         and marks_ok
         and cells_ok
+        and not identical_watson
+        and not identical_irene
+        and not placeholder_cells
         and len(races) >= 12
     )
     return {
@@ -648,8 +700,14 @@ def _quality(snap: Dict[str, Any], *, ref: Optional[Dict[str, Any]] = None) -> D
         "ordered_by_umaban": ordered_by_umaban,
         "marks_ok": marks_ok,
         "cells_ok": cells_ok,
+        "identical_watson_cells": identical_watson,
+        "identical_irene_cells": identical_irene,
+        "placeholder_cells": placeholder_cells,
+        "watson_cell_sample": watson_present[:6],
+        "irene_cell_sample": irene_present[:6],
         "sample_dev": sample.get("dev"),
         "sample_holmes": sample.get("holmes_index") or sample.get("holmes"),
+        "sample_cells": cells,
         "sample_shutuba0": rows[0] if rows else None,
         "prev_week_ref": {
             "ok": bool(ref and ref.get("ok")),
@@ -836,7 +894,7 @@ def main() -> int:
             out["error"] = "built snapshot failed quality checks"
             out["attempts"].append({"via": f"build_public_snapshot:{via}", "quality": q})
             # still try upload so operator can inspect; mark not-ok
-        up = export_mod.upload_public_snapshot(snap)  # type: ignore[attr-defined]
+        up = _upload_latest_snapshot(export_mod, snap)
         out["upload"] = _jsonable(up)
         if isinstance(up, dict) and up.get("ok") and q.get("ok"):
             out.update(

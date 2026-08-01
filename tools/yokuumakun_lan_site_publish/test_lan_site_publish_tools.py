@@ -167,6 +167,89 @@ class StandaloneBuildTests(unittest.TestCase):
         self.assertIn("◎", race["marks"]["ハ/ホプ"])
 
 
+class MatrixCellsTests(unittest.TestCase):
+    def test_cells_for_does_not_hardcode_placeholders(self) -> None:
+        from standalone_publish_from_cache import _cells_for
+
+        cells = _cells_for(
+            "hunter",
+            {
+                "watson": {"◎": 1, "○": 2},
+                "irene": {"◎": 3},
+                "hunter": {"◎": 1},
+            },
+            {"hunter_mode": True, "hunter_label": "ハンター"},
+        )
+        # 固定の様子・中位帯 / 様子・様子見を全レースに付けない
+        self.assertNotEqual(cells["ワ"], "様子・中位帯")
+        self.assertNotEqual(cells["アイ"], "様子・様子見")
+        self.assertEqual(cells["ハ/ホプ"], "ハンター")
+
+    def test_cells_from_edge_row_uses_display(self) -> None:
+        from standalone_publish_from_cache import _cells_from_edge_row
+        import types
+
+        class Cell:
+            def __init__(self, label: str):
+                self._label = label
+
+            def display(self):
+                return self._label
+
+        row = types.SimpleNamespace(
+            cells={
+                "watson": Cell("買・上位帯"),
+                "irene": Cell("見送・EV不足"),
+                "hunter": Cell("x"),
+            }
+        )
+        cells = _cells_from_edge_row(row)
+        self.assertEqual(cells["ワ"], "買・上位帯")
+        self.assertEqual(cells["アイ"], "見送・EV不足")
+
+    def test_upload_latest_uses_upload_json_object(self) -> None:
+        from official_republish_from_cache import _upload_latest_snapshot
+        import types
+
+        calls = {}
+
+        def upload_json_object(path, snap):
+            calls["path"] = path
+            calls["snap"] = snap
+            return ("https://example/latest.json", None)
+
+        mod = types.SimpleNamespace(upload_json_object=upload_json_object)
+        res = _upload_latest_snapshot(mod, {"race_count": 1})
+        self.assertTrue(res["ok"])
+        self.assertEqual(calls["path"], "snapshots/latest.json")
+
+    def test_quality_rejects_identical_placeholder_cells(self) -> None:
+        from official_republish_from_cache import _quality
+
+        races = []
+        for i in range(12):
+            races.append(
+                {
+                    "dev": 40.0 + i * 0.1,
+                    "holmes_index": str(50 + i),
+                    "marks": {"ワ": f"◎{i}", "アイ": f"◎{i}", "ハ/ホプ": f"◎{i}"},
+                    "cells": {"ワ": "様子・中位帯", "アイ": "様子・様子見", "ハ/ホプ": "ハンター"},
+                    "shutuba": {
+                        "rows": [
+                            {"馬番": "3", "推定3着内率": "40%"},
+                            {"馬番": "1", "推定3着内率": "30%"},
+                            {"馬番": "5", "推定3着内率": "20%"},
+                            {"馬番": "2", "推定3着内率": "10%"},
+                        ]
+                    },
+                }
+            )
+        snap = {"venues": [{"place": "札幌", "races": races}]}
+        q = _quality(snap)
+        self.assertFalse(q["ok"])
+        self.assertTrue(q["identical_watson_cells"] or q["placeholder_cells"])
+
+
 class HolmesOfficialApiTests(unittest.TestCase):
     def test_invoke_build_public_snapshot_uses_races_kwarg(self) -> None:
         """Server dump: build_public_snapshot(*, races, day_rows, schedule_date=None)."""

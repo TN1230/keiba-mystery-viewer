@@ -742,39 +742,121 @@ def _pick_best_logic(logic_marks: dict[str, Any], rinfo: dict[str, Any]) -> tupl
     return "hunter", LOGIC_LABELS["hunter"]
 
 
-def _cells_for(best_key: str, logic_marks: dict[str, Any], rinfo: dict[str, Any]) -> dict[str, str]:
+def _edge_cell_display(cell: Any, *, specialist: bool = False) -> str:
+    """RaceEdgeRow.cells の表示文字列。ワトソン/アイリーンは evaluation.display()。"""
+    if cell is None:
+        return "-"
+    if isinstance(cell, str):
+        return cell.strip() or "-"
+    if specialist:
+        try:
+            from public_viewer.export_public_snapshot import (  # type: ignore
+                format_specialist_matrix_presence,
+            )
+
+            s = format_specialist_matrix_presence(cell)
+            if s:
+                return str(s)
+        except Exception:
+            pass
+    for attr in ("display", "label", "text", "matrix_label"):
+        fn = getattr(cell, attr, None)
+        if callable(fn):
+            try:
+                s = fn()
+                if s not in (None, ""):
+                    return str(s)
+            except Exception:
+                continue
+        elif fn not in (None, ""):
+            return str(fn)
+    for attr in ("action_label", "band_label", "eval_label", "summary"):
+        val = getattr(cell, attr, None)
+        if val not in (None, ""):
+            return str(val)
+    return "-"
+
+
+def _cells_from_edge_row(row: Any) -> dict[str, str] | None:
+    cells_obj = getattr(row, "cells", None) if not isinstance(row, dict) else row.get("cells")
+    if not isinstance(cells_obj, dict) or not cells_obj:
+        return None
+    out = {"ワ": "-", "アイ": "-", "モ": "-", "ハ/ホプ": "-", "ベ": "-"}
+    mapping = (
+        ("watson", "ワ", False),
+        ("irene", "アイ", False),
+        ("moriarty", "モ", True),
+        ("hunter", "ハ/ホプ", True),
+        ("hope", "ハ/ホプ", True),
+    )
+    any_real = False
+    for lid, short, specialist in mapping:
+        if lid not in cells_obj:
+            continue
+        disp = _edge_cell_display(cells_obj.get(lid), specialist=specialist)
+        if disp and disp != "-":
+            out[short] = disp
+            any_real = True
+    return out if any_real else None
+
+
+def _cells_for(
+    best_key: str,
+    logic_marks: dict[str, Any],
+    rinfo: dict[str, Any],
+    *,
+    edge_cells: dict[str, str] | None = None,
+) -> dict[str, str]:
+    # 1) Edge 行の本物の評価帯（前週公式と同じ）
+    if isinstance(edge_cells, dict) and any(str(v or "") not in ("", "-") for v in edge_cells.values()):
+        return {
+            "ワ": _safe_str(edge_cells.get("ワ") or "-") or "-",
+            "アイ": _safe_str(edge_cells.get("アイ") or "-") or "-",
+            "モ": _safe_str(edge_cells.get("モ") or "-") or "-",
+            "ハ/ホプ": _safe_str(edge_cells.get("ハ/ホプ") or "-") or "-",
+            "ベ": _safe_str(edge_cells.get("ベ") or "-") or "-",
+        }
+
     existing = rinfo.get("cells") or rinfo.get("logic_cells")
     if isinstance(existing, dict) and existing:
-        # normalize keys
-        return {
+        # normalize keys — ただし全レース固定の placeholder は無視
+        norm = {
             "ワ": _safe_str(existing.get("ワ") or existing.get("ワトソン") or "-") or "-",
             "アイ": _safe_str(existing.get("アイ") or existing.get("アイリーン") or "-") or "-",
             "モ": _safe_str(existing.get("モ") or existing.get("モリアーティ") or "-") or "-",
             "ハ/ホプ": _safe_str(existing.get("ハ/ホプ") or existing.get("ハンター") or "-") or "-",
             "ベ": _safe_str(existing.get("ベ") or "-") or "-",
         }
+        placeholders = {"様子・中位帯", "様子・様子見"}
+        if not (norm["ワ"] in placeholders and norm["アイ"] in placeholders):
+            return norm
+
+    # 2) フォールバック: 固定評価帯は使わない（全レース同一の原因になる）
     cells = {"ワ": "-", "アイ": "-", "モ": "-", "ハ/ホプ": "-", "ベ": "-"}
-    if _format_mark_map(logic_marks.get("watson")) != "-":
-        cells["ワ"] = "様子・中位帯"
-    if _format_mark_map(logic_marks.get("irene")) != "-":
-        cells["アイ"] = "様子・様子見"
     hl = rinfo.get("hunter_label")
     if isinstance(hl, str) and hl.strip():
-        cells["ハ/ホプ"] = "ハンター"
+        # 第3探偵は「存在表示」が前週仕様（ハンター/ホプキンス）
+        if "ホプ" in hl:
+            cells["ハ/ホプ"] = "ホプキンス"
+        elif "ハンター" in hl:
+            cells["ハ/ホプ"] = "ハンター"
+        else:
+            cells["ハ/ホプ"] = hl.strip()
     elif _format_mark_map(logic_marks.get("hunter") or logic_marks.get("hope")) != "-":
-        cells["ハ/ホプ"] = "ハンター"
+        cells["ハ/ホプ"] = "ハンター" if best_key != "hope" else "ホプキンス"
     elif best_key == "hunter":
         cells["ハ/ホプ"] = "ハンター"
-    if best_key == "watson" and cells["ワ"] == "-":
-        cells["ワ"] = "様子・中位帯"
-    if best_key == "irene" and cells["アイ"] == "-":
-        cells["アイ"] = "様子・様子見"
-    if best_key == "moriarty":
+    if best_key == "moriarty" and _format_mark_map(logic_marks.get("moriarty")) != "-":
         cells["モ"] = "モリアーティ"
     return cells
 
 
-def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
+def _race_to_public(
+    rid: str,
+    rinfo: dict[str, Any],
+    *,
+    edge_cells: dict[str, str] | None = None,
+) -> dict[str, Any] | None:
     if not isinstance(rinfo, dict):
         return None
     info = _info(rinfo)
@@ -783,7 +865,7 @@ def _race_to_public(rid: str, rinfo: dict[str, Any]) -> dict[str, Any] | None:
     if not shutuba.get("rows"):
         return None
     best_key, best_label = _pick_best_logic(logic_marks, rinfo)
-    cells = _cells_for(best_key, logic_marks, rinfo)
+    cells = _cells_for(best_key, logic_marks, rinfo, edge_cells=edge_cells)
     marks = _public_marks(logic_marks)
     # if already public marks on rinfo
     if isinstance(rinfo.get("marks"), dict) and any(
@@ -928,11 +1010,9 @@ def _top5(races: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _collect_edge_best_scores(races_cache: dict[str, Any]) -> dict[str, float]:
-    """可能なら Edge day_rows の best_score を集める（前週公式経路と同系統）。"""
-    out: dict[str, float] = {}
+def _collect_edge_day_rows(races_cache: dict[str, Any]) -> list[Any]:
+    """Edge day_rows（評価帯・best_score の正本）。"""
     try:
-        # marks_baker ドリフト対策（official と同じパッチを流用）
         try:
             from official_republish_from_cache import (  # type: ignore
                 _patch_build_race_edge_row_kwargs,
@@ -943,23 +1023,71 @@ def _collect_edge_best_scores(races_cache: dict[str, Any]) -> dict[str, float]:
             pass
         from hwm import _collect_day_edge_rows_from_races  # type: ignore
 
-        rows = list(_collect_day_edge_rows_from_races(races_cache) or [])
-        for row in rows:
-            rid = str(getattr(row, "race_id", "") or "")
-            if not rid:
-                continue
-            try:
-                out[rid] = float(getattr(row, "best_score"))
-            except Exception:
-                continue
+        return list(_collect_day_edge_rows_from_races(races_cache) or [])
     except Exception:
-        return out
+        return []
+
+
+def _collect_edge_best_scores(races_cache: dict[str, Any]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for row in _collect_edge_day_rows(races_cache):
+        rid = str(getattr(row, "race_id", "") or "")
+        if not rid:
+            continue
+        try:
+            out[rid] = float(getattr(row, "best_score"))
+        except Exception:
+            continue
     return out
+
+
+def _edge_cells_by_race(day_rows: list[Any]) -> dict[str, dict[str, str]]:
+    out: dict[str, dict[str, str]] = {}
+    for row in day_rows or []:
+        rid = str(getattr(row, "race_id", "") or "")
+        if not rid:
+            continue
+        cells = _cells_from_edge_row(row)
+        if cells:
+            out[rid] = cells
+    return out
+
+
+def _try_build_snapshot_via_export(races_cache: dict[str, Any], day: str) -> dict[str, Any] | None:
+    """公式 export + Edge day_rows でスナップ構築（マトリクス評価帯の正本）。"""
+    day_rows = _collect_edge_day_rows(races_cache)
+    if len(day_rows) < max(8, len(races_cache) // 2):
+        return None
+    try:
+        from public_viewer.export_public_snapshot import build_public_snapshot  # type: ignore
+
+        snap = build_public_snapshot(
+            races=races_cache, day_rows=day_rows, schedule_date=str(day)
+        )
+    except Exception:
+        return None
+    if not isinstance(snap, dict) or int(snap.get("race_count") or 0) <= 0:
+        return None
+    # 馬体重・斤量の表示正規化
+    try:
+        from official_republish_from_cache import _normalize_shutuba_bataiju  # type: ignore
+
+        _normalize_shutuba_bataiju(snap)
+    except Exception:
+        pass
+    snap["_build_via"] = "standalone_via_export_day_rows"
+    snap["_skipped_races"] = 0
+    return snap
 
 
 def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
     # 前週参照レンジを先に温める
     _holmes_valid_range()
+
+    # 可能なら公式 export（Edge cells.display）を優先 — 固定評価帯事故を避ける
+    via_export = _try_build_snapshot_via_export(races_cache, day)
+    if via_export is not None:
+        return via_export
 
     morning_map: dict[str, Any] = {}
     try:
@@ -984,7 +1112,17 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
     except Exception:
         pass
 
-    edge_best = _collect_edge_best_scores(races_cache)
+    day_rows = _collect_edge_day_rows(races_cache)
+    edge_best: dict[str, float] = {}
+    for row in day_rows:
+        rid = str(getattr(row, "race_id", "") or "")
+        if not rid:
+            continue
+        try:
+            edge_best[rid] = float(getattr(row, "best_score"))
+        except Exception:
+            continue
+    edge_cells_map = _edge_cells_by_race(day_rows)
     hfields_fn = None
     try:
         from public_viewer.export_public_snapshot import _holmes_public_fields  # type: ignore
@@ -1005,7 +1143,11 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
                     rinfo["holmes_index"] = got
             if rid in edge_best and "best_score" not in rinfo:
                 rinfo["best_score"] = edge_best[rid]
-        pub = _race_to_public(str(rid), rinfo if isinstance(rinfo, dict) else {})
+        pub = _race_to_public(
+            str(rid),
+            rinfo if isinstance(rinfo, dict) else {},
+            edge_cells=edge_cells_map.get(str(rid)),
+        )
         if pub is None:
             skipped += 1
             continue
