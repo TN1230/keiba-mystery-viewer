@@ -13,6 +13,8 @@
 1. **今すぐ** キャッシュから `latest.json` を強制公開（空 snapshot は成功にしない）
 2. **朝一斉ワーカー**成功時に自動 publish（恒久パッチ）
 3. **直前予想ワーカー**成功時（`update_races_cache_entry` 直後）に自動 publish（恒久パッチ）
+   - 公開 race に `course` / `distance` / `course_label`（例: `ダート1000m（右）`）を載せる
+3b. （番号維持）
 4. **systemd timer**（05:30 起動後 **30秒ごと**）で
    - latest が空/前日
    - またはキャッシュの `predicted_at` が公開より新しい（max / race_id 単位）

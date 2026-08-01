@@ -994,6 +994,18 @@ def _race_to_public(
     else:
         holmes = str(int(round(score))) if abs(score - round(score)) < 1e-6 else f"{score:.1f}".rstrip("0").rstrip(".")
 
+    try:
+        from race_course_distance import extract_course_distance_fields
+
+        course_fields = extract_course_distance_fields(info, rinfo)
+    except Exception:
+        course_fields = {
+            "course": "",
+            "distance": "",
+            "course_division": "",
+            "course_label": "",
+        }
+
     return {
         "race_id": _safe_str(rid),
         "place": place,
@@ -1002,6 +1014,10 @@ def _race_to_public(
         "start_time": start,
         "weather": _safe_str(info.get("weather") or info.get("天候") or rinfo.get("weather")),
         "baba": _safe_str(info.get("baba") or info.get("馬場") or rinfo.get("baba")),
+        "course": course_fields.get("course") or "",
+        "distance": course_fields.get("distance") or "",
+        "course_division": course_fields.get("course_division") or "",
+        "course_label": course_fields.get("course_label") or "",
         "dev": _fmt_dev(rinfo.get("dev")),
         "rank": rinfo.get("rank"),
         "holmes_index": holmes,
@@ -1167,6 +1183,12 @@ def _try_build_snapshot_via_export(races_cache: dict[str, Any], day: str) -> dic
         pass
     snap["_build_via"] = "standalone_via_export_day_rows"
     snap["_skipped_races"] = 0
+    try:
+        from race_course_distance import enrich_snapshot_with_course_distance
+
+        enrich_snapshot_with_course_distance(snap, races_cache)
+    except Exception:
+        pass
     return snap
 
 
@@ -1309,7 +1331,7 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         f"{pre_line}\n"
         "※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください"
     )
-    return {
+    snap_out = {
         "schema_version": 3,
         "updated_at": now,
         "schedule_date": day,
@@ -1324,6 +1346,13 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         "_build_via": "standalone_publish_from_cache",
         "_skipped_races": skipped,
     }
+    try:
+        from race_course_distance import enrich_snapshot_with_course_distance
+
+        enrich_snapshot_with_course_distance(snap_out, races_cache)
+    except Exception:
+        pass
+    return snap_out
 
 
 def _upload_diag(payload: dict[str, Any]) -> None:

@@ -630,6 +630,33 @@
     return s;
   }
 
+  /** 芝/ダート/障害 + 距離。例: ダート1000m（右） */
+  function formatCourseDistanceLabel(race) {
+    if (!race || typeof race !== "object") return "";
+    const ready = String(race.course_label || "").trim();
+    if (ready) return ready;
+
+    const rawCourse = String(race.course || race.surface || "").trim();
+    let surface = "";
+    if (/障害|^障/.test(rawCourse)) surface = "障害";
+    else if (/ダート|^ダ|dirt/i.test(rawCourse)) surface = "ダート";
+    else if (/芝|turf/i.test(rawCourse)) surface = "芝";
+
+    const distRaw = String(race.distance || "").trim() || rawCourse;
+    const dm = distRaw.match(/(\d{3,4})\s*m?/i);
+    const dist = dm ? dm[1] : "";
+
+    let div = String(race.course_division || "").trim().replace(/^[（(【\[]|[）)】\]]$/g, "");
+    if (/直線/.test(div)) div = "直線";
+    else if (/右/.test(div)) div = "右";
+    else if (/左/.test(div)) div = "左";
+
+    if (!surface && !dist) return "";
+    let label = surface && dist ? `${surface}${dist}m` : surface || `${dist}m`;
+    if (div && !label.includes(div)) label = `${label}（${div}）`;
+    return label;
+  }
+
   function renderDetail() {
     const box = $("raceDetail");
     const found = findRace(state.raceId);
@@ -641,9 +668,13 @@
     const marks = r.marks || {};
     const cells = r.cells || {};
     const predictedAtLabel = formatPredictedAtLabel(r.predicted_at);
+    const courseLabel = formatCourseDistanceLabel(r);
+    const coursePart = courseLabel
+      ? ` ／ <span class="race-course">${escapeHtml(courseLabel)}</span>`
+      : "";
     let html = `
       <h3>${escapeHtml(r.place)} ${escapeHtml(r.R)}R ${escapeHtml(r.name || "")}</h3>
-      <p class="meta">発走 ${escapeHtml(r.start_time || "-")} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
+      <p class="meta">発走 ${escapeHtml(r.start_time || "-")}${coursePart} ／ 天気:${escapeHtml(r.weather || "-")} 馬場:${escapeHtml(r.baba || "-")}</p>
       <p class="meta race-predicted-at">予想更新時間: <strong>${escapeHtml(predictedAtLabel)}</strong></p>
       <p class="meta">期待値偏差: <strong>${escapeHtml(r.dev)}</strong>（ランク ${escapeHtml(r.rank || "-")}）</p>
       <p class="meta">ホームズ指数: <strong>${escapeHtml(formatHolmesIndexDisplay(r))}</strong> ／ 当日レース内順位: <strong>${escapeHtml(r.holmes_rank_text || "算出前")}</strong></p>

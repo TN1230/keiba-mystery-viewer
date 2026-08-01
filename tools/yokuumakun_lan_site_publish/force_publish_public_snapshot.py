@@ -227,6 +227,12 @@ def _publish_via_export(
         return {"ok": False, "error": "build_public_snapshot_bad_type"}
     snap.setdefault("schedule_date", day)
     snap["cleared"] = False
+    try:
+        from race_course_distance import enrich_snapshot_with_course_distance
+
+        enriched = enrich_snapshot_with_course_distance(snap, races)
+    except Exception:
+        enriched = 0
     meta = {
         "via": "export_upload",
         "schedule_date": day,
@@ -235,6 +241,7 @@ def _publish_via_export(
         "updated_at": snap.get("updated_at"),
         "day_rows_n": len(day_rows or []),
         "day_rows_is_none": day_rows is None,
+        "course_distance_enriched": enriched,
     }
     if not _snap_ok(snap, len(races)):
         meta["ok"] = False

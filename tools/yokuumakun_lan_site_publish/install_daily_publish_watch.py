@@ -18,6 +18,7 @@ def main() -> int:
         "force_publish_public_snapshot.py",
         "patch_pre_race_publish_on_success.py",
         "viewer_publish_wake.py",
+        "race_course_distance.py",
     ):
         src = here / name
         dst = root / name

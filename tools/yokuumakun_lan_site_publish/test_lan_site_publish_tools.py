@@ -827,6 +827,52 @@ class H:
             self.assertEqual(text2.count("def _handle_remote_bootstrap"), 1)
 
 
+class CourseDistanceTests(unittest.TestCase):
+    def test_format_dirt_with_division(self) -> None:
+        from race_course_distance import extract_course_distance_fields
+
+        fields = extract_course_distance_fields(
+            {"course": "ダ", "distance": 1000, "course_division": "右"}
+        )
+        self.assertEqual(fields["course"], "ダート")
+        self.assertEqual(fields["distance"], "1000")
+        self.assertEqual(fields["course_label"], "ダート1000m（右）")
+
+    def test_format_turf(self) -> None:
+        from race_course_distance import format_course_label
+
+        self.assertEqual(
+            format_course_label(course="芝", distance="1600", course_division=""),
+            "芝1600m",
+        )
+
+    def test_enrich_snapshot(self) -> None:
+        from race_course_distance import enrich_snapshot_with_course_distance
+
+        snap = {
+            "venues": [
+                {
+                    "races": [
+                        {"race_id": "202601010301", "place": "札幌", "R": "1"},
+                    ]
+                }
+            ]
+        }
+        cache = {
+            "202601010301": {
+                "info": {
+                    "course": "ダート",
+                    "distance": 1000,
+                    "course_division": "右",
+                }
+            }
+        }
+        n = enrich_snapshot_with_course_distance(snap, cache)
+        self.assertEqual(n, 1)
+        r = snap["venues"][0]["races"][0]
+        self.assertEqual(r["course_label"], "ダート1000m（右）")
+
+
 class ImmediateWakeTests(unittest.TestCase):
     def test_pending_forces_publish_decision(self) -> None:
         from morning_bulk_publish_watch import decide_publish

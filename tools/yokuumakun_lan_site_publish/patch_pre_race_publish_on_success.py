@@ -91,7 +91,11 @@ def _strip(text: str) -> str:
 
 def _copy_helpers(root: Path) -> None:
     here = Path(__file__).resolve().parent
-    for name in ("force_publish_public_snapshot.py", "viewer_publish_wake.py"):
+    for name in (
+        "force_publish_public_snapshot.py",
+        "viewer_publish_wake.py",
+        "race_course_distance.py",
+    ):
         src = here / name
         dst = root / name
         if src.is_file() and src.resolve() != dst.resolve():
