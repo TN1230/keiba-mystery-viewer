@@ -74,8 +74,26 @@ cp -f "$TMP/morning_bulk_publish_watch.py" "$ROOT/" 2>/dev/null || true
 mkdir -p "$ROOT/server_deployment"
 cp -f "$TMP"/yokuum-morning-publish-watch.*.example "$ROOT/server_deployment/" 2>/dev/null || true
 cd "$ROOT"
-.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py morning_bulk_server_worker.py admin_panel_api.py
-echo "py_compile rc=$?"
+set +e
+.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py morning_bulk_server_worker.py
+echo "py_compile_tools rc=$?"
+.venv/bin/python -m py_compile admin_panel_api.py
+ADMIN_COMPILE=$?
+echo "py_compile_admin rc=$ADMIN_COMPILE"
+if [[ "$ADMIN_COMPILE" -ne 0 ]]; then
+  echo "WARN: admin_panel_api.py indent/syntax broken — restoring backups"
+  if [[ -f admin_panel_api.py.bak_publish_endpoint ]]; then
+    cp -f admin_panel_api.py.bak_publish_endpoint admin_panel_api.py
+    echo "restored from bak_publish_endpoint"
+    # publish endpoint のみ再適用（remote-bootstrap は壊すのでスキップ）
+    python3 "$TMP/install_publish_endpoint.py" "$ROOT" || true
+  elif [[ -f admin_panel_api.py.bak_remote_bootstrap ]]; then
+    cp -f admin_panel_api.py.bak_remote_bootstrap admin_panel_api.py
+    echo "restored from bak_remote_bootstrap"
+  fi
+  .venv/bin/python -m py_compile admin_panel_api.py
+  echo "py_compile_admin_after_restore rc=$?"
+fi
 python3 "$TMP/install_daily_publish_watch.py" "$ROOT"
 echo "timer_install rc=$?"
 set +e
@@ -87,7 +105,7 @@ cd "$ROOT"
 PUB_RC2=$?
 echo "force_publish2 rc=$PUB_RC2"
 
-if systemctl is-active --quiet yokuum-admin-panel.service 2>/dev/null; then
+if systemctl list-unit-files yokuum-admin-panel.service 2>/dev/null | grep -q yokuum-admin-panel; then
   sudo_run systemctl restart yokuum-admin-panel.service || true
   sleep 1
   curl -sS http://127.0.0.1:8791/health || true

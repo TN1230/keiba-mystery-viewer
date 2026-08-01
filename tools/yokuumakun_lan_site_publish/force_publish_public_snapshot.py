@@ -38,14 +38,19 @@ def _load_env(root: Path) -> None:
         load_dotenv(root / ".env", override=False)
     except Exception:
         pass
-    rt = root / "server_deployment" / "hwm_runtime.env"
-    if rt.is_file():
-        try:
-            from dotenv import load_dotenv
+    for rel in (
+        "server_deployment/hwm_runtime.env",
+        "server_deployment/.env",
+        ".env.local",
+    ):
+        rt = root / rel
+        if rt.is_file():
+            try:
+                from dotenv import load_dotenv
 
-            load_dotenv(rt, override=False)
-        except Exception:
-            pass
+                load_dotenv(rt, override=False)
+            except Exception:
+                pass
 
 
 def _try_load_pkl(fp: Path) -> dict[str, Any]:
@@ -60,7 +65,6 @@ def _try_load_pkl(fp: Path) -> dict[str, Any]:
 
 
 def _day_from_name(name: str) -> str:
-    # morning_bulk_races_YYYYMMDD.pkl / morning_bulk_races_YYYY-MM-DD.pkl
     stem = name.replace("morning_bulk_races_", "").replace(".pkl", "")
     if len(stem) == 8 and stem.isdigit():
         return f"{stem[0:4]}-{stem[4:6]}-{stem[6:8]}"
@@ -72,7 +76,6 @@ def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-    # 1) 公式ヘルパ
     try:
         from hwm_server_standalone import (  # type: ignore
             _load_morning_bulk_races_cache,
@@ -92,7 +95,6 @@ def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
     today = datetime.now(_JST).strftime("%Y-%m-%d")
     candidates: list[tuple[float, str, Path]] = []
 
-    # 2) 日付候補を広く探す
     days = [today]
     for delta in range(1, 4):
         days.append((datetime.now(_JST) - timedelta(days=delta)).strftime("%Y-%m-%d"))
@@ -105,13 +107,11 @@ def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
             if fp.is_file():
                 candidates.append((fp.stat().st_mtime, day, fp))
 
-    # 3) 名前が違う/日付不明な pkl も新しい順で拾う
     if logs.is_dir():
         for fp in logs.glob("morning_bulk_races_*.pkl"):
             day = _day_from_name(fp.name)
             candidates.append((fp.stat().st_mtime, day, fp))
 
-    # mtime 新しい順・ユニーク path
     seen: set[str] = set()
     ordered: list[tuple[str, Path]] = []
     for _mtime, day, fp in sorted(candidates, key=lambda x: x[0], reverse=True):
@@ -122,22 +122,18 @@ def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
         ordered.append((day, fp))
 
     notes.append(
-        "pkl_candidates="
-        + ",".join(f"{d}:{p.name}" for d, p in ordered[:8])
+        "pkl_candidates=" + ",".join(f"{d}:{p.name}" for d, p in ordered[:8])
     )
 
     for day, fp in ordered:
         races = _try_load_pkl(fp)
         if races:
             notes.append(f"loaded {fp.name} day={day} n={len(races)}")
-            # day が変でも schedule_date は today を優先（開催日想定）
             use_day = today if day.startswith("20") else today
-            # pkl 名の日付が today/近傍ならそれを使う
             if day in days:
                 use_day = day
             return use_day, races, notes
 
-    # 4) done flag だけある場合のヒント
     if logs.is_dir():
         flags = sorted(logs.glob("morning_bulk_done_*.flag"))
         notes.append("done_flags=" + ",".join(p.name for p in flags[-5:]))
@@ -145,30 +141,124 @@ def _load_races(root: Path) -> tuple[str, dict[str, Any], list[str]]:
     return today, {}, notes
 
 
-def _publish_via_export(races: dict[str, Any], day: str) -> dict[str, Any]:
+def _race_info(rinfo: Any) -> dict[str, Any]:
+    if not isinstance(rinfo, dict):
+        return {}
+    info = rinfo.get("info")
+    return info if isinstance(info, dict) else {}
+
+
+def _day_rows_from_races(races: dict[str, Any]) -> list[dict[str, Any]]:
+    """build_public_snapshot は day_rows=None だと会場殻だけ出して races を落とすことがある。"""
+    rows: list[dict[str, Any]] = []
+    for rid in sorted(races.keys(), key=str):
+        rinfo = races.get(rid)
+        if not isinstance(rinfo, dict):
+            continue
+        info = _race_info(rinfo)
+        place = info.get("place") or rinfo.get("place") or ""
+        r_no = info.get("R") or rinfo.get("R") or ""
+        name = info.get("name") or rinfo.get("race_name") or rinfo.get("name") or ""
+        start = info.get("start_time") or rinfo.get("start_time") or ""
+        row = {
+            "race_id": str(rid),
+            "id": str(rid),
+            "place": place,
+            "会場": place,
+            "R": r_no,
+            "レース": r_no,
+            "name": name,
+            "race_name": name,
+            "start_time": start,
+            "発走": start,
+        }
+        # info の素のキーも残す（実装差吸収）
+        for k, v in info.items():
+            if k not in row:
+                row[k] = v
+        rows.append(row)
+    return rows
+
+
+def _sample_race_diag(races: dict[str, Any]) -> dict[str, Any]:
+    if not races:
+        return {"n": 0}
+    rid = sorted(races.keys(), key=str)[0]
+    rinfo = races.get(rid)
+    out: dict[str, Any] = {"n": len(races), "sample_id": str(rid)}
+    if not isinstance(rinfo, dict):
+        out["sample_type"] = type(rinfo).__name__
+        return out
+    out["sample_keys"] = sorted(str(k) for k in rinfo.keys())
+    info = _race_info(rinfo)
+    out["info_keys"] = sorted(str(k) for k in info.keys()) if info else []
+    out["has_prediction"] = rinfo.get("prediction") is not None
+    out["prediction_type"] = type(rinfo.get("prediction")).__name__
+    out["has_df"] = rinfo.get("df") is not None
+    out["predicted_at"] = rinfo.get("predicted_at")
+    out["place"] = info.get("place") or rinfo.get("place")
+    out["R"] = info.get("R") or rinfo.get("R")
+    return out
+
+
+def _snap_ok(snap: dict[str, Any], n_cache: int) -> bool:
+    try:
+        rc = int(snap.get("race_count") or 0)
+    except Exception:
+        rc = 0
+    if rc > 0:
+        return True
+    # 会場殻だけの成功は失敗扱い（キャッシュがあるとき）
+    return n_cache <= 0
+
+
+def _publish_via_export(
+    races: dict[str, Any], day: str, *, day_rows: list[Any] | None
+) -> dict[str, Any]:
     from public_viewer.export_public_snapshot import (  # type: ignore
         build_public_snapshot,
         upload_json_object,
     )
 
-    snap = build_public_snapshot(races=races, day_rows=None, schedule_date=day)
+    snap = build_public_snapshot(
+        races=races, day_rows=day_rows, schedule_date=day
+    )
     if not isinstance(snap, dict):
         return {"ok": False, "error": "build_public_snapshot_bad_type"}
     snap.setdefault("schedule_date", day)
-    # cleared が残らないように明示
     snap["cleared"] = False
-    url, err = upload_json_object("snapshots/latest.json", snap)
-    if err:
-        return {"ok": False, "error": str(err), "via": "export_upload"}
-    return {
-        "ok": True,
+    meta = {
         "via": "export_upload",
-        "url": url,
         "schedule_date": day,
         "race_count": snap.get("race_count"),
         "venue_count": snap.get("venue_count"),
         "updated_at": snap.get("updated_at"),
+        "day_rows_n": len(day_rows or []),
+        "day_rows_is_none": day_rows is None,
     }
+    if not _snap_ok(snap, len(races)):
+        meta["ok"] = False
+        meta["error"] = "empty_snapshot_race_count"
+        # 中身のヒント
+        venues = snap.get("venues") if isinstance(snap.get("venues"), list) else []
+        meta["venue_race_lens"] = [
+            {
+                "place": (v or {}).get("place"),
+                "n": len((v or {}).get("races") or []),
+            }
+            for v in venues[:8]
+            if isinstance(v, dict)
+        ]
+        return meta
+
+    url, err = upload_json_object("snapshots/latest.json", snap)
+    if err:
+        meta["ok"] = False
+        meta["error"] = str(err)
+        return meta
+    meta["ok"] = True
+    meta["url"] = url
+    return meta
 
 
 def _publish_via_hwm(force: bool = True) -> dict[str, Any]:
@@ -176,6 +266,41 @@ def _publish_via_hwm(force: bool = True) -> dict[str, Any]:
 
     _publish_public_viewer_snapshot(force=force)
     return {"ok": True, "via": "hwm._publish_public_viewer_snapshot", "force": force}
+
+
+def _upload_diag(payload: dict[str, Any]) -> str | None:
+    try:
+        from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
+
+        url, err = upload_json_object("ops/force_publish_last.json", payload)
+        if err:
+            return f"diag_upload_err={err}"
+        return f"diag_url={url}"
+    except Exception as e:
+        return f"diag_upload_exc={type(e).__name__}:{e}"
+
+
+def _try_upload_export_source() -> str | None:
+    try:
+        import inspect
+
+        from public_viewer import export_public_snapshot as mod  # type: ignore
+
+        src = inspect.getsource(mod.build_public_snapshot)
+        payload = {
+            "updated_at": datetime.now(_JST).isoformat(timespec="seconds"),
+            "func": "build_public_snapshot",
+            "source": src[:120000],
+            "module_file": getattr(mod, "__file__", None),
+        }
+        from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
+
+        url, err = upload_json_object("ops/build_public_snapshot_source.py.json", payload)
+        if err:
+            return f"source_upload_err={err}"
+        return f"source_url={url}"
+    except Exception as e:
+        return f"source_upload_exc={type(e).__name__}:{e}"
 
 
 def run_publish(*, force: bool = True) -> dict[str, Any]:
@@ -188,14 +313,19 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
     os.environ.setdefault("HWM_SUBPROCESS_PREDICT", "1")
 
     day, races, notes = _load_races(root)
+    diag = _sample_race_diag(races)
+    notes.append(f"sample={json.dumps(diag, ensure_ascii=False, default=str)[:800]}")
+
     if not races:
-        return {
+        out = {
             "ok": False,
             "error": "empty_races_cache",
             "schedule_date": day,
             "root": str(root),
             "notes": notes,
         }
+        notes.append(str(_upload_diag(out)))
+        return out
 
     try:
         import streamlit as st  # type: ignore
@@ -205,36 +335,90 @@ def run_publish(*, force: bool = True) -> dict[str, Any]:
     except Exception:
         pass
 
+    day_rows = _day_rows_from_races(races)
+    notes.append(f"day_rows_built n={len(day_rows)}")
+    notes.append(str(_try_upload_export_source()))
+
     errors: list[str] = []
+    attempts: list[dict[str, Any]] = []
+
+    # 1) day_rows 付き export（本命）
     try:
-        out = _publish_via_export(races, day)
+        out = _publish_via_export(races, day, day_rows=day_rows)
+        attempts.append(dict(out))
         if out.get("ok"):
             out["n_races_cache"] = len(races)
             out["notes"] = notes
+            out["attempts"] = attempts
+            notes.append(str(_upload_diag(out)))
             return out
         errors.append(str(out.get("error")))
     except Exception as e:
-        errors.append(f"export: {type(e).__name__}: {e}")
+        errors.append(f"export_day_rows: {type(e).__name__}: {e}")
+        attempts.append({"ok": False, "error": errors[-1]})
 
+    # 2) day_rows=None（従来・比較用）
+    try:
+        out = _publish_via_export(races, day, day_rows=None)
+        attempts.append(dict(out))
+        if out.get("ok"):
+            out["n_races_cache"] = len(races)
+            out["notes"] = notes
+            out["attempts"] = attempts
+            notes.append(str(_upload_diag(out)))
+            return out
+        errors.append(str(out.get("error")))
+    except Exception as e:
+        errors.append(f"export_none: {type(e).__name__}: {e}")
+        attempts.append({"ok": False, "error": errors[-1]})
+
+    # 3) hwm 経路（UI と同じ）
     try:
         out = _publish_via_hwm(force=force)
+        # hwm は戻り値が薄いので latest を確認
+        try:
+            import urllib.request
+
+            with urllib.request.urlopen(
+                "https://rathgwvfewasazxlpusx.supabase.co/storage/v1/object/public/"
+                "public-viewer/snapshots/latest.json",
+                timeout=30,
+            ) as resp:
+                latest = json.loads(resp.read().decode("utf-8"))
+            rc = int((latest or {}).get("race_count") or 0)
+            out["race_count"] = rc
+            out["schedule_date_latest"] = (latest or {}).get("schedule_date")
+            if rc <= 0:
+                out["ok"] = False
+                out["error"] = "hwm_publish_still_empty"
+        except Exception as e:
+            out["latest_check_error"] = f"{type(e).__name__}: {e}"
         out["n_races_cache"] = len(races)
         out["schedule_date"] = day
         out["export_errors"] = errors
         out["notes"] = notes
-        return out
+        out["attempts"] = attempts
+        notes.append(str(_upload_diag(out)))
+        if out.get("ok"):
+            return out
+        attempts.append(dict(out))
+        errors.append(str(out.get("error") or "hwm_failed"))
     except Exception as e:
         errors.append(f"hwm: {type(e).__name__}: {e}")
+        attempts.append({"ok": False, "error": errors[-1]})
 
-    return {
+    out = {
         "ok": False,
         "error": "all_publish_paths_failed",
         "errors": errors,
         "schedule_date": day,
         "n_races_cache": len(races),
         "notes": notes,
+        "attempts": attempts,
         "traceback": traceback.format_exc()[-2000:],
     }
+    notes.append(str(_upload_diag(out)))
+    return out
 
 
 def main() -> int:

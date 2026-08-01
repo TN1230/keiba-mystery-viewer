@@ -37,17 +37,6 @@ def main() -> int:
     root = Path(args.root)
     _load_env(root)
 
-    supabase = (os.environ.get("SUPABASE_URL") or "").strip().strip('"').rstrip("/")
-    key = (
-        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-        or os.environ.get("SUPABASE_KEY")
-        or ""
-    ).strip().strip('"')
-    bucket = (os.environ.get("SUPABASE_PUBLIC_VIEWER_BUCKET") or "public-viewer").strip()
-    if not supabase or not key:
-        print("WARN: no supabase creds for status upload", flush=True)
-        return 0
-
     log_tail = ""
     lp = Path(args.log)
     if lp.is_file():
@@ -73,6 +62,36 @@ def main() -> int:
         "log_tail": log_tail,
         "hostname": os.uname().nodename if hasattr(os, "uname") else "",
     }
+
+    # 1) サーバー側 export ヘルパ経由（.env の読み方が揃っている）
+    try:
+        import sys
+
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from public_viewer.export_public_snapshot import upload_json_object  # type: ignore
+
+        url, err = upload_json_object("ops/lan_site_publish_last.json", payload)
+        if not err:
+            print(f"OK uploaded status via export_upload")
+            print(url)
+            return 0
+        print(f"WARN: export_upload failed: {err}", flush=True)
+    except Exception as e:
+        print(f"WARN: export_upload exc: {type(e).__name__}: {e}", flush=True)
+
+    supabase = (os.environ.get("SUPABASE_URL") or "").strip().strip('"').rstrip("/")
+    key = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_KEY")
+        or os.environ.get("SUPABASE_ANON_KEY")
+        or ""
+    ).strip().strip('"')
+    bucket = (os.environ.get("SUPABASE_PUBLIC_VIEWER_BUCKET") or "public-viewer").strip()
+    if not supabase or not key:
+        print("WARN: no supabase creds for status upload", flush=True)
+        return 0
+
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     object_path = "ops/lan_site_publish_last.json"
     headers = {
