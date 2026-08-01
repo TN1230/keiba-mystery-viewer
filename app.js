@@ -146,7 +146,11 @@
   function allRaces() {
     const out = [];
     for (const v of venues()) {
-      for (const r of v.races || []) out.push(r);
+      const place = v && v.place;
+      for (const r of v.races || []) {
+        // 発走表グリッドは place 必須。レース側に無いときは会場名で補う
+        out.push(r.place ? r : { ...r, place });
+      }
     }
     return out;
   }
