@@ -27,6 +27,21 @@
   const btnLogsRefresh = document.getElementById("btnLogsRefresh");
   const btnLogsClose = document.getElementById("btnLogsClose");
 
+  // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+  const btnTenkaiSim = document.getElementById("btnTenkaiSim");
+  const tenkaiSimPanel = document.getElementById("tenkaiSimPanel");
+  const tenkaiSimMeta = document.getElementById("tenkaiSimMeta");
+  const tenkaiSimStatus = document.getElementById("tenkaiSimStatus");
+  const tenkaiVenueTabs = document.getElementById("tenkaiVenueTabs");
+  const tenkaiJumpButtons = document.getElementById("tenkaiJumpButtons");
+  const btnTenkaiClose = document.getElementById("btnTenkaiClose");
+  const adminShell = document.getElementById("adminApp");
+  let tenkaiSnap = null;
+  let tenkaiPlace = null;
+  let tenkaiUrlTemplate = "";
+  let discoveryCache = null;
+  // --- END TEMP: TENKAI_SIM_LAUNCH ---
+
   function setStatus(el, message, kind) {
     if (!el) return;
     el.textContent = message || "";
@@ -123,6 +138,9 @@
     loginPanel.hidden = false;
     menuPanel.hidden = true;
     if (logsPanel) logsPanel.hidden = true;
+    // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+    hideTenkaiSimPanel();
+    // --- END TEMP: TENKAI_SIM_LAUNCH ---
   }
 
   function showMenu() {
@@ -135,6 +153,9 @@
     loginPanel.hidden = true;
     menuPanel.hidden = false;
     if (logsPanel) logsPanel.hidden = false;
+    // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+    hideTenkaiSimPanel();
+    // --- END TEMP: TENKAI_SIM_LAUNCH ---
   }
 
   function eventLabel(event) {
@@ -262,6 +283,9 @@
       );
     }
     const data = await res.json();
+    // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+    discoveryCache = data && typeof data === "object" ? data : null;
+    // --- END TEMP: TENKAI_SIM_LAUNCH ---
     const url = String((data && data.base_url) || "").replace(/\/+$/, "");
     if (!url) {
       throw new Error("管理API接続情報に base_url がありません。");
@@ -269,6 +293,217 @@
     apiBase = url;
     return apiBase;
   }
+
+  // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+  function tenkaiEnabled() {
+    return cfg.SHOW_TENKAI_SIM_LAUNCH !== false;
+  }
+
+  function hideTenkaiSimPanel() {
+    if (tenkaiSimPanel) tenkaiSimPanel.hidden = true;
+    if (adminShell) adminShell.classList.remove("is-tenkai-open");
+  }
+
+  function jumpClass(rank) {
+    const r = Number(rank);
+    if (r >= 1 && r <= 5) return "jump rank-hi";
+    if (r >= 6 && r <= 10) return "jump rank-mid";
+    return "jump";
+  }
+
+  async function resolveTenkaiUrlTemplate() {
+    const fromCfg = String(cfg.TENKAI_SIM_URL_TEMPLATE || "").trim();
+    if (fromCfg) return fromCfg;
+    try {
+      await resolveApiBase();
+    } catch {
+      /* ignore */
+    }
+    if (discoveryCache && discoveryCache.tenkai_sim_url_template) {
+      return String(discoveryCache.tenkai_sim_url_template).trim();
+    }
+    if (discoveryCache && discoveryCache.tenkai_sim_base_url) {
+      const base = String(discoveryCache.tenkai_sim_base_url).replace(/\/+$/, "");
+      return `${base}/tenkai?race_id={race_id}`;
+    }
+    if (apiBase) return `${apiBase}/tenkai?race_id={race_id}`;
+    return "";
+  }
+
+  function buildTenkaiSimUrl(race) {
+    const tpl = tenkaiUrlTemplate || "";
+    if (!tpl || !race) return "";
+    const scheduleDate =
+      (tenkaiSnap && tenkaiSnap.schedule_date) ||
+      String((race && race.schedule_date) || "");
+    const rn = String(race.R || "").replace(/[Rr]$/, "");
+    const place = String(race.place || tenkaiPlace || "");
+    const raceId = String(race.race_id || "");
+    const enc = {
+      "{race_id}": encodeURIComponent(raceId),
+      "{place}": encodeURIComponent(place),
+      "{venue}": encodeURIComponent(place),
+      "{R}": encodeURIComponent(rn),
+      "{race_no}": encodeURIComponent(rn),
+      "{schedule_date}": encodeURIComponent(scheduleDate),
+      "{kaisai_date}": encodeURIComponent(scheduleDate),
+    };
+    return Object.keys(enc).reduce((out, key) => out.split(key).join(enc[key]), tpl);
+  }
+
+  function openTenkaiSim(race) {
+    const url = buildTenkaiSimUrl(race);
+    if (!url) {
+      setStatus(
+        tenkaiSimStatus,
+        "シミュレーションURLが未設定です。config.js の TENKAI_SIM_URL_TEMPLATE か discovery の tenkai_sim_url_template を設定してください。",
+        "error"
+      );
+      return;
+    }
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      setStatus(tenkaiSimStatus, "ポップアップがブロックされました。許可して再試行してください。", "error");
+      return;
+    }
+    const rn = String(race.R || "").replace(/[Rr]$/, "") || "-";
+    setStatus(tenkaiSimStatus, `${race.place || ""} ${rn}R を別タブで開きました`, "ok");
+  }
+
+  function renderTenkaiVenueTabs() {
+    if (!tenkaiVenueTabs) return;
+    tenkaiVenueTabs.innerHTML = "";
+    const venues = (tenkaiSnap && tenkaiSnap.venues) || [];
+    if (!venues.length) {
+      tenkaiVenueTabs.innerHTML = "<span class='hint'>会場データがありません</span>";
+      return;
+    }
+    if (!tenkaiPlace || !venues.some((v) => v.place === tenkaiPlace)) {
+      tenkaiPlace = venues[0].place;
+    }
+    for (const v of venues) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tab" + (v.place === tenkaiPlace ? " active" : "");
+      b.textContent = v.place;
+      b.setAttribute("aria-pressed", v.place === tenkaiPlace ? "true" : "false");
+      b.addEventListener("click", () => {
+        tenkaiPlace = v.place;
+        renderTenkaiVenueTabs();
+        renderTenkaiJumps();
+      });
+      tenkaiVenueTabs.appendChild(b);
+    }
+  }
+
+  function renderTenkaiJumps() {
+    if (!tenkaiJumpButtons) return;
+    tenkaiJumpButtons.innerHTML = "";
+    const venues = (tenkaiSnap && tenkaiSnap.venues) || [];
+    const venue = venues.find((v) => v.place === tenkaiPlace) || null;
+    const races = (venue && venue.races) || [];
+    if (!races.length) {
+      tenkaiJumpButtons.innerHTML = "<p class='hint'>この会場のレースがありません</p>";
+      return;
+    }
+    for (const r of races) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = jumpClass(r.holmes_index_rank);
+      const rn = String(r.R || "").replace(/[Rr]$/, "") || "-";
+      b.textContent = `${rn}R`;
+      const tip =
+        r.holmes_rank_text && r.holmes_rank_text !== "算出前"
+          ? `${r.place} ${rn}R（${r.holmes_rank_text}）`
+          : `${r.place} ${rn}R`;
+      b.title = tip;
+      b.addEventListener("click", () => openTenkaiSim(r));
+      tenkaiJumpButtons.appendChild(b);
+    }
+  }
+
+  async function loadTenkaiSnapshot() {
+    const url = String(cfg.SNAPSHOT_URL || "").trim();
+    if (!url || url.includes("YOUR_")) {
+      throw new Error("SNAPSHOT_URL が未設定です");
+    }
+    const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`予想データ取得失敗 (HTTP ${res.status})`);
+    const data = await res.json();
+    const venues = Array.isArray(data.venues) ? data.venues : [];
+    const raceCount = Number(data.race_count || 0);
+    const nRaces = venues.reduce((acc, v) => acc + ((v && v.races) || []).length, 0);
+    if (!nRaces || raceCount === 0) {
+      const err = new Error("当日予想データがありません（race_count=0）");
+      err.code = "no_races";
+      throw err;
+    }
+    return data;
+  }
+
+  async function showTenkaiSimPanel() {
+    if (!tenkaiEnabled() || !tenkaiSimPanel) return;
+    if (logsPanel) logsPanel.hidden = true;
+    tenkaiSimPanel.hidden = false;
+    if (adminShell) adminShell.classList.add("is-tenkai-open");
+    setStatus(tenkaiSimStatus, "読み込み中…");
+    if (tenkaiSimMeta) {
+      tenkaiSimMeta.textContent =
+        "当日予想データから会場・レースを選ぶと、別タブでシミュレーションを開きます。";
+    }
+    try {
+      tenkaiUrlTemplate = await resolveTenkaiUrlTemplate();
+      tenkaiSnap = await loadTenkaiSnapshot();
+      renderTenkaiVenueTabs();
+      renderTenkaiJumps();
+      const n = Number(tenkaiSnap.race_count || 0);
+      if (tenkaiSimMeta) {
+        tenkaiSimMeta.textContent =
+          `開催日 ${tenkaiSnap.schedule_date || "-"} / ${n}レース` +
+          (tenkaiUrlTemplate ? "" : "（URLテンプレート未解決）");
+      }
+      setStatus(
+        tenkaiSimStatus,
+        tenkaiUrlTemplate
+          ? "レースボタンを押すと別タブで開きます"
+          : "URLテンプレート未設定です。TENKAI_SIM_URL_TEMPLATE を確認してください。",
+        tenkaiUrlTemplate ? "ok" : "error"
+      );
+    } catch (e) {
+      tenkaiSnap = null;
+      if (tenkaiVenueTabs) tenkaiVenueTabs.innerHTML = "";
+      if (tenkaiJumpButtons) tenkaiJumpButtons.innerHTML = "";
+      const msg =
+        e && e.code === "no_races"
+          ? "当日予想データがありません。一斉予想後に再度お試しください。"
+          : e.message || String(e);
+      if (tenkaiSimMeta) tenkaiSimMeta.textContent = msg;
+      setStatus(tenkaiSimStatus, msg, "error");
+    }
+  }
+
+  function initTenkaiSimLaunch() {
+    if (!tenkaiEnabled()) {
+      if (btnTenkaiSim) btnTenkaiSim.hidden = true;
+      hideTenkaiSimPanel();
+      return;
+    }
+    if (btnTenkaiSim) {
+      btnTenkaiSim.hidden = false;
+      btnTenkaiSim.addEventListener("click", async () => {
+        await showTenkaiSimPanel();
+      });
+    }
+    if (btnTenkaiClose) {
+      btnTenkaiClose.addEventListener("click", () => {
+        hideTenkaiSimPanel();
+        setStatus(menuStatus, "");
+      });
+    }
+  }
+  // --- END TEMP: TENKAI_SIM_LAUNCH ---
 
   async function api(path, { method = "GET", body, token, silent = false, retryDiscover = true } = {}) {
     const base = await resolveApiBase();
@@ -437,6 +672,10 @@
       "モデムを再起動します。通信が一時的に切れます。ログアウト後も再起動処理は継続します。よろしいですか？"
     );
   });
+
+  // --- BEGIN TEMP: TENKAI_SIM_LAUNCH ---
+  initTenkaiSimLaunch();
+  // --- END TEMP: TENKAI_SIM_LAUNCH ---
 
   btnOpsLogs.addEventListener("click", async () => {
     showLogsPanel();
