@@ -2,16 +2,36 @@
 # サーバー上で実行: 翌日以降 05:00 に automation が確実に起動するよう恒久設定
 # 例:
 #   export YOKUMAKUN_SUDO_PASS='…'
-#   curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-day-timetable-guard-19c2/tools/yokuumakun_race_day_start/bootstrap_on_server.sh | bash
+#   bash bootstrap_on_server.sh <commit-sha-or-branch>
 set -euo pipefail
 
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
-BRANCH="${1:-cursor/race-day-timetable-guard-19c2}"
-BASE="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${BRANCH}/tools/yokuumakun_race_day_start"
+REF="${1:-${YOKUMAKUN_BOOTSTRAP_SHA:-cursor/race-day-timetable-guard-19c2}}"
 SUDO_PASS="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-}}"
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
+
+resolve_sha() {
+  local ref="$1"
+  if [[ "$ref" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+    echo "$ref"
+    return 0
+  fi
+  local sha
+  sha="$(curl -fsSL -H 'Accept: application/vnd.github.sha' \
+    "https://api.github.com/repos/t-orz/keiba-mystery-viewer/commits/${ref}" 2>/dev/null || true)"
+  if [[ "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    echo "$sha"
+    return 0
+  fi
+  curl -fsSL "https://api.github.com/repos/t-orz/keiba-mystery-viewer/commits/${ref}" \
+    | python3 -c 'import sys,json; print(json.load(sys.stdin)["sha"])'
+}
+
+SHA="$(resolve_sha "$REF")"
+BASE="https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${SHA}/tools/yokuumakun_race_day_start"
+JSDELIVR="https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${SHA}/tools/yokuumakun_race_day_start"
 
 sudo_run() {
   if [[ -n "$SUDO_PASS" ]]; then
@@ -21,15 +41,12 @@ sudo_run() {
   fi
 }
 
-# bust CDN/proxy caches so re-runs pick up installer fixes
-CACHE_BUST="$(date +%s)"
 fetch() {
   local f="$1"
-  if curl -fsSL -o "$f" "${BASE}/${f}?t=${CACHE_BUST}"; then
+  if curl -fsSL -o "$f" "${BASE}/${f}"; then
     return 0
   fi
-  # jsDelivr branch tip can lag; prefer commit-ish raw above
-  curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_start/${f}"
+  curl -fsSL -o "$f" "${JSDELIVR}/${f}"
 }
 
 persist_sudo_pass_to_env() {
@@ -46,7 +63,7 @@ persist_sudo_pass_to_env() {
   fi
 }
 
-echo "INFO: race-day START bootstrap root=$ROOT branch=$BRANCH"
+echo "INFO: race-day START bootstrap root=$ROOT ref=$REF sha=${SHA:0:12}"
 echo "INFO: system time: $(TZ=Asia/Tokyo date -Iseconds)"
 timedatectl 2>/dev/null | grep -i 'Time zone' || true
 
@@ -64,6 +81,13 @@ do
   fetch "$f"
 done
 chmod +x race_day_start_wrapper.sh ensure_race_day_start_cron.sh
+
+# Prove we are not about to run a stale SameFile-vulnerable installer from DEST
+if ! grep -q 'SameFileError' install_race_day_start_timer.py; then
+  echo "ERROR: fetched install_race_day_start_timer.py looks stale (no SameFileError guard)" >&2
+  echo "ERROR: sha=${SHA} — refuse to continue" >&2
+  exit 1
+fi
 
 DEST="${ROOT}/server_deployment"
 mkdir -p "$DEST" "$ROOT/logs"
@@ -84,6 +108,7 @@ PY="$ROOT/.venv/bin/python3"
 
 echo "=== install systemd timers (05:00 + 05:15) ==="
 # Run from TMP so installer src != server_deployment dst (avoids shutil.SameFileError)
+echo "INFO: running installer from $TMP/install_race_day_start_timer.py"
 "$PY" "$TMP/install_race_day_start_timer.py" "$ROOT"
 
 echo "=== install cron backup ==="
@@ -94,4 +119,4 @@ systemctl is-enabled yokuum-race-day-start.timer yokuum-race-day-start-guard.tim
 systemctl list-timers 'yokuum-race-day-start*' --no-pager 2>&1 || true
 crontab -l 2>/dev/null | grep -nE 'CRON_TZ|race_day_start|preflight' || true
 
-echo "DONE: race-day start timetable armed (05:00 start + 05:15 miss-guard)"
+echo "DONE: race-day start timetable armed (05:00 start + 05:15 miss-guard) sha=${SHA:0:12}"
