@@ -1,0 +1,20 @@
+[Unit]
+Description=yokuumakun SSH TCP internet tunnel (bore.pub)
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tn
+WorkingDirectory=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+Environment=TZ=Asia/Tokyo
+Environment=SSH_TUNNEL_USER=tn
+EnvironmentFile=-/opt/yokuumakun_auto-x/.env
+ExecStart=/bin/bash /opt/yokuumakun_auto-x/server_deployment/ssh_tcp_tunnel.sh
+Restart=always
+RestartSec=8
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
