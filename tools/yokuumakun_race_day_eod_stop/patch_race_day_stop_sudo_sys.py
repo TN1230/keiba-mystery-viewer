@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""race_day_stop_hwm.sh の bare `sudo systemctl` を非対話対応に差し替える。
+"""race_day_stop_hwm.sh を cron/systemd 非対話実行向けに硬化する。
 
-cron から動かすとき `sudo` がパスワード要求で失敗し、automation が止まらない
-事例への対策。YOKUMAKUN_SUDO_PASS / SUDO_PASSWORD があれば sudo -S を使う。
+- bare `sudo systemctl` → sudo_sys（YOKUMAKUN_SUDO_PASS / sudo -n）
+- ROOT/.env と hwm_runtime.env を自動 load（次回以降パスワードを cron に書かなくてよい）
+- TZ=Asia/Tokyo を保証
 """
 
 from __future__ import annotations
@@ -13,51 +14,89 @@ import shutil
 import sys
 from pathlib import Path
 
-BEGIN = "# BEGIN sudo_sys_race_day_stop"
-END = "# END sudo_sys_race_day_stop"
+BEGIN_SUDO = "# BEGIN sudo_sys_race_day_stop"
+END_SUDO = "# END sudo_sys_race_day_stop"
+BEGIN_ENV = "# BEGIN load_env_race_day_stop"
+END_ENV = "# END load_env_race_day_stop"
 
-SUDO_SYS_FN = r'''
-{begin}
-sudo_sys() {
-  # non-interactive sudo for cron
-  local pw="${YOKUMAKUN_SUDO_PASS:-${YOKUMAKUN_SSH_PASS:-${SUDO_PASSWORD:-}}}"
+SUDO_SYS_FN = f"""
+{BEGIN_SUDO}
+sudo_sys() {{
+  # non-interactive sudo for cron / systemd timer
+  local pw="${{YOKUMAKUN_SUDO_PASS:-${{YOKUMAKUN_SSH_PASS:-${{SUDO_PASSWORD:-}}}}}}"
   if [[ -n "$pw" ]]; then
     echo "$pw" | sudo -S -p '' "$@"
   else
     sudo -n "$@"
   fi
-}
-{end}
-'''.replace("{begin}", BEGIN).replace("{end}", END)
+}}
+{END_SUDO}
+"""
+
+LOAD_ENV_BLOCK = f"""
+{BEGIN_ENV}
+# cron/timer からでも .env の sudo パス等を読む
+_load_env_file() {{
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  set -a
+  # shellcheck disable=SC1090
+  . "$f"
+  set +a
+}}
+_load_env_file "${{ROOT}}/.env"
+_load_env_file "${{ROOT}}/server_deployment/hwm_runtime.env"
+{END_ENV}
+"""
 
 
 def patch_text(text: str) -> tuple[str, str]:
-    if BEGIN in text and "sudo_sys systemctl" in text:
-        return text, "already"
-
     new = text
-    if BEGIN not in new:
-        # insert after set -euo pipefail or after export TZ
-        m = re.search(r"(?m)^export TZ=Asia/Tokyo\s*$", new)
-        if m:
-            insert_at = m.end()
-            new = new[:insert_at] + "\n" + SUDO_SYS_FN + new[insert_at:]
-        else:
-            m2 = re.search(r"(?m)^set -euo pipefail\s*$", new)
-            if not m2:
-                return text, "error:no_insert_point"
-            insert_at = m2.end()
-            new = new[:insert_at] + "\n" + SUDO_SYS_FN + new[insert_at:]
+    changed = False
 
-    # replace bare sudo systemctl stop/restart with sudo_sys
+    if "export TZ=Asia/Tokyo" not in new:
+        m = re.search(r"(?m)^set -euo pipefail\s*$", new)
+        if m:
+            new = new[: m.end()] + "\n\nexport TZ=Asia/Tokyo\n" + new[m.end() :]
+            changed = True
+        else:
+            new = "export TZ=Asia/Tokyo\n" + new
+            changed = True
+
+    if BEGIN_SUDO not in new:
+        m = re.search(r"(?m)^export TZ=Asia/Tokyo\s*$", new)
+        if not m:
+            return text, "error:no_tz_line"
+        new = new[: m.end()] + "\n" + SUDO_SYS_FN + new[m.end() :]
+        changed = True
+
+    # ROOT 定義の直後に env load
+    if BEGIN_ENV not in new:
+        m = re.search(
+            r"(?m)^ROOT=\"\$\{YOKUMAKUN_ROOT:-\$\(cd \"\$\(dirname \"\$0\"\)/\.\.\" && pwd\)\}\"\s*$",
+            new,
+        )
+        if not m:
+            m = re.search(r"(?m)^ROOT=.*$", new)
+        if not m:
+            return text, "error:no_root_line"
+        new = new[: m.end()] + "\n" + LOAD_ENV_BLOCK + new[m.end() :]
+        changed = True
+
     new2, n = re.subn(
         r"(?m)^(\s*)sudo systemctl (stop|restart|start) ",
         r"\1sudo_sys systemctl \2 ",
         new,
     )
-    if n == 0 and "sudo_sys systemctl" not in new2:
+    if n:
+        changed = True
+        new = new2
+    elif "sudo_sys systemctl" not in new:
         return text, "error:no_sudo_systemctl_lines"
-    return new2, "patched" if n or BEGIN not in text else "already"
+
+    if not changed and BEGIN_SUDO in text and BEGIN_ENV in text and "sudo_sys systemctl" in text:
+        return text, "already"
+    return new, "patched" if changed else "already"
 
 
 def patch(root: Path) -> dict:
@@ -82,6 +121,11 @@ def patch(root: Path) -> dict:
         target.chmod(target.stat().st_mode | 0o111)
     except Exception:
         pass
+    # 片方しか無い場合は server_deployment にも揃える
+    sd = root / "server_deployment" / "race_day_stop_hwm.sh"
+    if target.resolve() != sd.resolve() and target.is_file():
+        sd.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(target, sd)
     return {"ok": True, "status": status, "path": str(target), "backup": str(bak)}
 
 

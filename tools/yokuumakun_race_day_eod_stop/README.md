@@ -1,57 +1,40 @@
-# 開催日 20:00 JST 終了の硬化（EOD stop）
+# 開催日 20:00 JST 自動停止（恒久）
 
-## 結論（よくある誤解）
+次回以降、**毎日 20:00（Asia/Tokyo）** に `race_day_stop_hwm.sh` が自動実行されるようにします。
 
-**`hwm.py` / `hwm_server_automation.py` は「JST を見て 20:00 に自己終了」しません。**  
-20:00 の停止は **外部 cron → `race_day_stop_hwm.sh`** が担当します。
+## 仕組み（二重化）
 
-したがって「20時を過ぎても終わらない」主因は、だいたい次のいずれかです。
+| 優先 | 手段 | 時刻 |
+|---|---|---|
+| 本線 | systemd `yokuum-race-day-stop.timer` | `OnCalendar=*-*-* 20:00:00 Asia/Tokyo` |
+| 保険 | crontab（`CRON_TZ=Asia/Tokyo`） | `0 20 * * *` |
+| 最終保険 | `hwm_server_automation._tick` の JST 20:00 `SystemExit` | プロセス側 |
 
-1. **`0 20 * * * race_day_stop_hwm.sh` が crontab に無い / 動いていない**
-2. **cron から `sudo systemctl stop` が失敗**（非対話 sudo / `-x` 未許可）
-3. （副次）自動化側が naive `datetime.now()` を使っていても、**20:00 終了判定自体が無い**ので「JST未認識」だけでは説明できない
+`hwm.py` 自体に 20:00 終了判定はありません。停止は上記の外部スケジュールが担当します。
 
-`race_day_stop_hwm.sh` 自体は `export TZ=Asia/Tokyo` しています。  
-cron の発火時刻は **OS のローカルタイムゾーン**依存なので、`timedatectl` で `Asia/Tokyo` であることを確認してください。
-
-## いま公開側で見える兆候
-
-`latest.json` が 20:00 過ぎても `cleared` でなく `race_count>0` のままなら、finalize/stop が未完了の可能性が高いです。
-
-## このツールが入れるもの
-
-| 項目 | 内容 |
-|---|---|
-| JST EOD ガード | `hwm_server_automation._tick` が **JST 20:00 以降**なら `SystemExit`（cron 失敗時の保険） |
-| stop の sudo 修正 | `race_day_stop_hwm.sh` の bare `sudo` を `sudo_sys`（`YOKUMAKUN_SUDO_PASS` / `sudo -n`）へ |
-| cron 登録 | 毎日 `0 20 * * *` で `race_day_stop_hwm.sh` |
-
-## サーバー適用（推奨）
+## サーバーへの一回適用（これで次回以降ずっと有効）
 
 ```bash
-export YOKUMAKUN_SUDO_PASS='…'   # cron/stop 用
+export YOKUMAKUN_SUDO_PASS='…'
 curl -fsSL https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/cursor/race-day-eod-jst-stop-guard-19c2/tools/yokuumakun_race_day_eod_stop/bootstrap_on_server.sh | bash
 ```
 
-すでに 20:00 JST を過ぎている場合、bootstrap は **その場で stop を実行**します。
+bootstrap が行うこと:
 
-### 手動で今すぐ止める
+1. automation に JST 20:00 自己停止ガードを注入
+2. `race_day_stop_hwm.sh` を非対話 sudo + `.env` 読み込み対応にパッチ
+3. **systemd timer を enable --now**（本線）
+4. crontab に `CRON_TZ=Asia/Tokyo` + 20:00 行を登録（保険）
+5. `.env` に `YOKUMAKUN_SUDO_PASS` が無ければ追記（次回以降のため）
+6. すでに 20:00 JST 過ぎなら即 stop 実行
 
-```bash
-export YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
-export YOKUMAKUN_SUDO_PASS='…'
-bash /opt/yokuumakun_auto-x/server_deployment/race_day_stop_hwm.sh
-# または
-sudo systemctl stop yokuum-server-automation-x.service
-```
-
-### 確認
+## 確認
 
 ```bash
-timedatectl | grep -i 'Time zone'          # Asia/Tokyo
-crontab -l | grep race_day_stop
-systemctl is-active yokuum-server-automation-x.service   # inactive が正常（20時以降）
-ls -lt /opt/yokuumakun_auto-x/logs/race_day_stop_*.log | head
+systemctl is-enabled yokuum-race-day-stop.timer    # enabled
+systemctl list-timers yokuum-race-day-stop.timer --no-pager
+crontab -l | grep -E 'CRON_TZ|race_day_stop'
+timedatectl | grep -i 'Time zone'
 ```
 
 ## 単体テスト

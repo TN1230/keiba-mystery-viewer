@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# サーバー上で実行: JST EOD 自己停止ガード + race_day_stop の cron/sudo 修正
+# サーバー上で実行: 次回以降 毎日 20:00 JST に自動 stop するよう恒久設定
 # 例:
 #   export YOKUMAKUN_SUDO_PASS='…'
+#   # 任意: サーバー .env にも YOKUMAKUN_SUDO_PASS を書いておく（推奨）
 #   bash bootstrap_on_server.sh
 #   bash bootstrap_on_server.sh cursor/race-day-eod-jst-stop-guard-19c2
 set -euo pipefail
@@ -30,29 +31,69 @@ fetch() {
   curl -fsSL -o "$f" "https://cdn.jsdelivr.net/gh/t-orz/keiba-mystery-viewer@${BRANCH}/tools/yokuumakun_race_day_eod_stop/$f"
 }
 
+persist_sudo_pass_to_env() {
+  # 次回以降 cron/timer が読めるよう .env に SUDO_PASS を残す（未設定時のみ追記）
+  [[ -n "$SUDO_PASS" ]] || return 0
+  local envf="${ROOT}/.env"
+  mkdir -p "$ROOT"
+  touch "$envf"
+  if grep -qE '^YOKUMAKUN_SUDO_PASS=' "$envf" 2>/dev/null; then
+    echo "INFO: YOKUMAKUN_SUDO_PASS already present in $envf"
+  else
+    printf '\n# used by race_day_stop (cron/systemd, non-interactive sudo)\nYOKUMAKUN_SUDO_PASS=%s\n' "$SUDO_PASS" >>"$envf"
+    chmod 600 "$envf" || true
+    echo "INFO: appended YOKUMAKUN_SUDO_PASS to $envf"
+  fi
+}
+
 echo "INFO: race-day EOD stop bootstrap root=$ROOT branch=$BRANCH"
 echo "INFO: system time: $(TZ=Asia/Tokyo date -Iseconds) (forced TZ=Asia/Tokyo for display)"
 timedatectl 2>/dev/null | grep -i 'Time zone' || true
 
 cd "$TMP"
-fetch patch_automation_jst_eod_guard.py
-fetch patch_race_day_stop_sudo_sys.py
-fetch ensure_race_day_stop_cron.sh
+for f in \
+  patch_automation_jst_eod_guard.py \
+  patch_race_day_stop_sudo_sys.py \
+  ensure_race_day_stop_cron.sh \
+  install_race_day_stop_timer.py \
+  yokuum-race-day-stop.service.example \
+  yokuum-race-day-stop.timer.example
+do
+  fetch "$f"
+done
 chmod +x ensure_race_day_stop_cron.sh
+
+# ツールを server_deployment に恒久コピー
+DEST="${ROOT}/server_deployment"
+mkdir -p "$DEST"
+cp -f patch_automation_jst_eod_guard.py patch_race_day_stop_sudo_sys.py \
+  install_race_day_stop_timer.py ensure_race_day_stop_cron.sh \
+  yokuum-race-day-stop.service.example yokuum-race-day-stop.timer.example \
+  "$DEST/" 2>/dev/null || true
 
 PY="${ROOT}/.venv/bin/python"
 if [[ ! -x "$PY" ]]; then
   PY="$(command -v python3)"
 fi
 
+export YOKUMAKUN_SUDO_PASS="${SUDO_PASS}"
+export YOKUMAKUN_ROOT="$ROOT"
+
+persist_sudo_pass_to_env
+
 echo "INFO: patch automation JST EOD guard"
 "$PY" patch_automation_jst_eod_guard.py "$ROOT" || true
 
-echo "INFO: patch race_day_stop sudo_sys"
+echo "INFO: patch race_day_stop (sudo_sys + .env load)"
 "$PY" patch_race_day_stop_sudo_sys.py "$ROOT" || true
 
-echo "INFO: ensure 20:00 cron"
-bash ensure_race_day_stop_cron.sh
+echo "INFO: install systemd timer (primary: daily 20:00 Asia/Tokyo)"
+"$PY" install_race_day_stop_timer.py "$ROOT" || {
+  echo "WARN: systemd timer install failed — cron backup still applied"
+}
+
+echo "INFO: ensure crontab backup (CRON_TZ=Asia/Tokyo)"
+bash ensure_race_day_stop_cron.sh || true
 
 # すでに 20:00 JST を過ぎていれば即停止を試みる
 HOUR="$(TZ=Asia/Tokyo date +%H)"
@@ -61,16 +102,16 @@ if [[ "$HOUR" -ge 20 ]]; then
   STOP="${ROOT}/server_deployment/race_day_stop_hwm.sh"
   [[ -f "$STOP" ]] || STOP="${ROOT}/race_day_stop_hwm.sh"
   if [[ -f "$STOP" ]]; then
-    export YOKUMAKUN_ROOT="$ROOT"
-    export YOKUMAKUN_SUDO_PASS="${SUDO_PASS}"
     bash "$STOP" || true
   else
     echo "WARN: stop script missing; falling back to systemctl stop"
     sudo_run systemctl stop yokuum-server-automation-x.service || true
   fi
 else
-  echo "INFO: before 20:00 JST — cron will stop at 20:00"
+  echo "INFO: before 20:00 JST — next fire via yokuum-race-day-stop.timer / cron"
 fi
 
 echo "INFO: automation state: $(systemctl is-active yokuum-server-automation-x.service 2>/dev/null || echo unknown)"
-echo "DONE: race-day EOD stop hardening installed"
+echo "INFO: timer enabled: $(systemctl is-enabled yokuum-race-day-stop.timer 2>/dev/null || echo unknown)"
+systemctl list-timers yokuum-race-day-stop.timer --no-pager 2>/dev/null || true
+echo "DONE: race-day 20:00 JST auto-stop installed for future days"

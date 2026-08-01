@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from patch_automation_jst_eod_guard import BEGIN, already_patched, patch, patch_text
+from patch_race_day_stop_sudo_sys import BEGIN_ENV, BEGIN_SUDO
 from patch_race_day_stop_sudo_sys import patch_text as patch_stop_text
 
 
@@ -28,7 +29,7 @@ set -euo pipefail
 
 export TZ=Asia/Tokyo
 
-ROOT=/opt/yokuumakun_auto-x
+ROOT="${YOKUMAKUN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 SERVICE_NAME=yokuum-server-automation-x.service
 
 if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
@@ -45,7 +46,6 @@ class AutomationGuardTests(unittest.TestCase):
         self.assertIn('_ZI_eod("Asia/Tokyo")', new)
         self.assertIn("hour) >= 20", new)
         self.assertIn("SystemExit", new)
-        # still after mode-enabled check
         self.assertLess(
             new.index("if not _hwm_server_auto_mode_enabled()"),
             new.index(BEGIN),
@@ -69,17 +69,31 @@ class AutomationGuardTests(unittest.TestCase):
 
 
 class StopSudoTests(unittest.TestCase):
-    def test_replaces_sudo_systemctl(self) -> None:
+    def test_replaces_sudo_and_loads_env(self) -> None:
         new, status = patch_stop_text(SAMPLE_STOP)
         self.assertEqual(status, "patched")
-        self.assertIn("sudo_sys()", new)
+        self.assertIn(BEGIN_SUDO, new)
+        self.assertIn(BEGIN_ENV, new)
         self.assertIn("sudo_sys systemctl stop", new)
-        self.assertNotIn("\nsudo systemctl stop", new)
+        self.assertIn('${ROOT}/.env', new)
+        self.assertNotRegex(new, r"(?m)^\s*sudo systemctl stop ")
 
     def test_idempotent_stop(self) -> None:
         once, _ = patch_stop_text(SAMPLE_STOP)
         twice, status = patch_stop_text(once)
         self.assertEqual(status, "already")
+        self.assertEqual(once.count(BEGIN_ENV), 1)
+
+
+class TimerUnitTests(unittest.TestCase):
+    def test_timer_is_jst_20(self) -> None:
+        here = Path(__file__).resolve().parent
+        tmr = (here / "yokuum-race-day-stop.timer.example").read_text(encoding="utf-8")
+        self.assertIn("20:00:00 Asia/Tokyo", tmr)
+        self.assertIn("Persistent=true", tmr)
+        svc = (here / "yokuum-race-day-stop.service.example").read_text(encoding="utf-8")
+        self.assertIn("race_day_stop_hwm.sh", svc)
+        self.assertIn("TZ=Asia/Tokyo", svc)
 
 
 if __name__ == "__main__":

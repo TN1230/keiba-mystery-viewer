@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 開催日 20:00 JST の race_day_stop_hwm.sh を crontab に登録する
+# 開催日 20:00 JST の race_day_stop_hwm.sh を crontab に登録する（systemd timer の保険）
 set -euo pipefail
 
 ROOT="${YOKUMAKUN_ROOT:-/opt/yokuumakun_auto-x}"
@@ -16,16 +16,22 @@ chmod +x "$STOP" || true
 LOG="${ROOT}/logs/cron_race_day_stop.log"
 mkdir -p "${ROOT}/logs"
 
-# cron はシステムのローカル時刻で動く。Asia/Tokyo であることを確認推奨。
-LINE="0 20 * * * YOKUMAKUN_ROOT=${ROOT} YOKUMAKUN_SERVER_AUTO_SERVICE=yokuum-server-automation-x.service ${STOP} >> ${LOG} 2>&1"
+MARKER="race_day_stop_hwm.sh"
+LINE="0 20 * * * YOKUMAKUN_ROOT=${ROOT} YOKUMAKUN_SERVER_AUTO_SERVICE=yokuum-server-automation-x.service TZ=Asia/Tokyo ${STOP} >> ${LOG} 2>&1"
 
+EXISTING="$(crontab -l 2>/dev/null || true)"
 TMP="$(mktemp)"
-crontab -l 2>/dev/null | grep -v 'race_day_stop_hwm\.sh' >"$TMP" || true
-echo "$LINE" >>"$TMP"
+{
+  echo "CRON_TZ=Asia/Tokyo"
+  # 既存行から本ジョブと旧 CRON_TZ を除いて残す
+  printf '%s\n' "$EXISTING" | grep -v "${MARKER}" | grep -vE '^CRON_TZ=' || true
+  echo "$LINE"
+} >"$TMP"
+
 crontab "$TMP"
 rm -f "$TMP"
 
-echo "DONE: installed cron line:"
+echo "DONE: installed cron (CRON_TZ=Asia/Tokyo) line:"
 echo "$LINE"
-echo "INFO: verify timezone with: timedatectl | grep -i 'Time zone'  (expect Asia/Tokyo)"
-crontab -l | grep -n 'race_day_stop' || true
+echo "INFO: primary schedule is systemd yokuum-race-day-stop.timer; cron is backup"
+crontab -l | grep -nE 'CRON_TZ|race_day_stop' || true
