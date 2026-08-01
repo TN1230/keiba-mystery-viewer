@@ -1,3 +1,13 @@
+/* Viewer styles.css locks html/body scroll on desktop (≥721px).
+   Admin has no inner scroll pane, so restore document scrolling. */
+html.admin-html,
+body.admin-body {
+  height: auto;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .admin-body {
   min-height: 100vh;
   display: flex;
