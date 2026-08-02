@@ -134,7 +134,9 @@ echo "INFO: ensure crontab backup (CRON_TZ=Asia/Tokyo)"
 bash ensure_race_day_stop_cron.sh || true
 
 # すでに 20:00 JST を過ぎていれば即停止 + latest クリア
+# %H は 09 のように leading zero 付き → 10# で十進強制（[[: 09: value too great for base 回避）
 HOUR="$(TZ=Asia/Tokyo date +%H)"
+HOUR=$((10#$HOUR))
 if [[ "$HOUR" -ge 20 ]]; then
   echo "WARN: already past 20:00 JST — stop automation + clear latest"
   STOP="${ROOT}/server_deployment/race_day_stop_hwm.sh"

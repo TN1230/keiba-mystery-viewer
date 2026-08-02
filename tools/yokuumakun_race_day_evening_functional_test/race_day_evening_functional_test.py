@@ -1016,6 +1016,9 @@ def check_stop_finalize_logs(root: Path, day: str) -> tuple[bool, str, str]:
     stop_t = _today_files(stop)
     fin_t = _today_files(fin)
     if not stop_t and not fin_t:
+        # 21:00 本番以外の日中ドライランでは 20:00 未到来が普通
+        if datetime.now(_JST).hour < 20:
+            return True, "20:00前のため stop/finalize ログ未作成は正常", "info"
         return False, "本日の race_day_stop/finalize ログが無い", "error"
     # 末尾エラーざっと
     err_hits = 0
@@ -1162,6 +1165,14 @@ def autofix_publish_watch_timer(root: Path, day: str) -> AutofixResult:
 
 def autofix_stop_finalize_logs(root: Path, day: str) -> AutofixResult:
     """ログ欠落時: 既存の stop/finalize スクリプトがあれば実行を試みる。"""
+    if datetime.now(_JST).hour < 20:
+        return AutofixResult(
+            "race_day_stop_finalize_logs",
+            False,
+            True,
+            "20:00前のため stop 自動実行をスキップ",
+            skipped_reason="before_eod",
+        )
     notes: list[str] = []
     stop = _find_first_script(
         root,
