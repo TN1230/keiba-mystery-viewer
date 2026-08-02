@@ -1,0 +1,14 @@
+[Unit]
+Description=yokuumakun race-day EOD stop (finalize + stop automation)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=tn
+WorkingDirectory=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_SERVER_AUTO_SERVICE=yokuum-server-automation-x.service
+Environment=TZ=Asia/Tokyo
+# .env の YOKUMAKUN_SUDO_PASS を stop スクリプト側で読む（ここには書かない）
+ExecStart=/bin/bash /opt/yokuumakun_auto-x/server_deployment/race_day_stop_hwm.sh
+Nice=5

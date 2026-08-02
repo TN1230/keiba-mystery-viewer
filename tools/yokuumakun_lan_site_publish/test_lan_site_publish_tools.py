@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 class DayRowsTests(unittest.TestCase):
@@ -500,6 +501,17 @@ def main():
 
 
 class PublishWatchDecisionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # 実時刻が 20:00 JST 以降でも日中判定テストが壊れないようにする
+        self._eod_patcher = mock.patch(
+            "morning_bulk_publish_watch._in_eod_no_publish_window",
+            return_value=False,
+        )
+        self._eod_patcher.start()
+
+    def tearDown(self) -> None:
+        self._eod_patcher.stop()
+
     def test_parse_dt_accepts_unix_float(self) -> None:
         from morning_bulk_publish_watch import _parse_dt
         from datetime import datetime
@@ -513,6 +525,66 @@ class PublishWatchDecisionTests(unittest.TestCase):
         self.assertEqual(dt.strftime("%Y-%m-%d %H:%M:%S"), "2026-08-01 16:04:40")
         dt2 = _parse_dt(str(ts))
         self.assertIsNotNone(dt2)
+
+    def test_eod_cleared_same_day_is_noop(self) -> None:
+        from morning_bulk_publish_watch import decide_publish
+
+        self._eod_patcher.stop()
+        with mock.patch(
+            "morning_bulk_publish_watch._in_eod_no_publish_window",
+            return_value=True,
+        ):
+            out = decide_publish(
+                Path("/tmp"),
+                "2026-08-01",
+                {
+                    "schedule_date": "2026-08-01",
+                    "race_count": 0,
+                    "cleared": True,
+                    "venues": [],
+                },
+            )
+        self._eod_patcher.start()
+        self.assertEqual(out["action"], "noop")
+        self.assertEqual(out["reason"], "eod_cleared")
+
+    def test_day_already_cleared_before_eod_is_noop(self) -> None:
+        from morning_bulk_publish_watch import decide_publish
+
+        out = decide_publish(
+            Path("/tmp"),
+            "2026-08-01",
+            {
+                "schedule_date": "2026-08-01",
+                "race_count": 0,
+                "cleared": True,
+                "venues": [],
+            },
+        )
+        self.assertEqual(out["action"], "noop")
+        self.assertEqual(out["reason"], "day_already_cleared")
+
+    def test_cleared_previous_day_still_triggers_empty_publish(self) -> None:
+        from morning_bulk_publish_watch import decide_publish, _public_empty_or_wrong_day
+
+        self.assertTrue(
+            _public_empty_or_wrong_day(
+                {"schedule_date": "2026-07-31", "cleared": True, "race_count": 0},
+                "2026-08-01",
+            )
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            logs = root / "logs"
+            logs.mkdir()
+            (logs / "morning_bulk_done_2026-08-01.flag").write_text("ok", encoding="utf-8")
+            out = decide_publish(
+                root,
+                "2026-08-01",
+                {"schedule_date": "2026-07-31", "cleared": True, "race_count": 0},
+            )
+            self.assertEqual(out["action"], "force_publish")
+            self.assertEqual(out["reason"], "empty_or_wrong_day")
 
     def test_classify_anomaly_for_publish_lag(self) -> None:
         from morning_bulk_publish_watch import classify_anomaly
