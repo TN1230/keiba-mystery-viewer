@@ -1303,8 +1303,35 @@ def autofix_eod_snapshot_state(root: Path, day: str) -> AutofixResult:
 
 
 
+def _run_local_cmds(root: Path, cmds: list[list[str]]) -> tuple[bool, str]:
+    """Run already-deployed server scripts (LAN ops). No Cloud Agent / GitHub curl."""
+    env = os.environ.copy()
+    env["YOKUMAKUN_ROOT"] = str(root)
+    env.setdefault("TZ", "Asia/Tokyo")
+    notes: list[str] = []
+    ok_all = True
+    for cmd in cmds:
+        try:
+            cp = subprocess.run(
+                cmd,
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env,
+            )
+            snippet = ((cp.stdout or "") + (cp.stderr or "")).strip()[-160:]
+            notes.append(f"{' '.join(cmd[-2:])}:rc={cp.returncode} {snippet}")
+            if cp.returncode != 0:
+                ok_all = False
+        except Exception as e:
+            notes.append(f"{cmd[-1]}:{type(e).__name__}:{e}")
+            ok_all = False
+    return ok_all, "; ".join(notes)[-400:]
+
+
 def _run_bootstrap_curl(path_under_tools: str, root: Path) -> tuple[bool, str]:
-    """Run a raw.githubusercontent bootstrap for timetable packs."""
+    """Last-resort GitHub bootstrap (only if local installers are missing)."""
     import shlex
 
     branch = (
@@ -1329,32 +1356,96 @@ def _run_bootstrap_curl(path_under_tools: str, root: Path) -> tuple[bool, str]:
             env=env,
         )
         out = ((cp.stdout or "") + (cp.stderr or "")).strip()[-300:]
-        return cp.returncode == 0, f"rc={cp.returncode} {out}"
+        return cp.returncode == 0, f"curl-fallback rc={cp.returncode} {out}"
     except Exception as e:
-        return False, f"{type(e).__name__}:{e}"
+        return False, f"curl-fallback {type(e).__name__}:{e}"
 
 
 def autofix_start_schedule_armed(root: Path, day: str) -> AutofixResult:
-    ok_run, note = _run_bootstrap_curl(
-        "tools/yokuumakun_race_day_start/bootstrap_on_server.sh", root
-    )
+    dest = root / "server_deployment"
+    py = root / ".venv" / "bin" / "python3"
+    if not py.is_file():
+        py = Path(sys.executable)
+    install = dest / "install_race_day_start_timer.py"
+    cron = dest / "ensure_race_day_start_cron.sh"
+    if install.is_file() and cron.is_file():
+        ok_run, note = _run_local_cmds(
+            root,
+            [[str(py), str(install), str(root)], ["bash", str(cron)]],
+        )
+    else:
+        ok_run, note = _run_bootstrap_curl(
+            "tools/yokuumakun_race_day_start/bootstrap_on_server.sh", root
+        )
     ok_chk, detail, _ = check_start_schedule_armed()
     return AutofixResult("start_schedule_armed", True, ok_chk and ok_run, f"{detail}; {note}")
 
 
 def autofix_stop_schedule_armed(root: Path, day: str) -> AutofixResult:
-    ok_run, note = _run_bootstrap_curl(
-        "tools/yokuumakun_race_day_eod_stop/bootstrap_on_server.sh", root
-    )
+    dest = root / "server_deployment"
+    py = root / ".venv" / "bin" / "python3"
+    if not py.is_file():
+        py = Path(sys.executable)
+    install = dest / "install_race_day_stop_timer.py"
+    cron = dest / "ensure_race_day_stop_cron.sh"
+    if install.is_file() and cron.is_file():
+        ok_run, note = _run_local_cmds(
+            root,
+            [[str(py), str(install), str(root)], ["bash", str(cron)]],
+        )
+    else:
+        ok_run, note = _run_bootstrap_curl(
+            "tools/yokuumakun_race_day_eod_stop/bootstrap_on_server.sh", root
+        )
     ok_chk, detail, _ = check_stop_schedule_armed()
     return AutofixResult("stop_schedule_armed", True, ok_chk and ok_run, f"{detail}; {note}")
 
 
 def autofix_evening_schedule_armed(root: Path, day: str) -> AutofixResult:
-    ok_run, note = _run_bootstrap_curl(
-        "tools/yokuumakun_race_day_evening_functional_test/bootstrap_on_server.sh",
-        root,
-    )
+    dest = root / "server_deployment"
+    script = dest / "race_day_evening_functional_test.py"
+    install_cron = dest / "install_evening_crontab.sh"
+    if not install_cron.is_file():
+        install_cron = dest / "install_crontab.sh"
+    # Prefer already-deployed local installers (LAN ops). Avoid Cloud Agent / curl.
+    if script.is_file():
+        py = root / ".venv" / "bin" / "python3"
+        if not py.is_file():
+            py = Path(sys.executable)
+        if install_cron.is_file():
+            ok_run, note = _run_local_cmds(
+                root, [["bash", str(install_cron), str(root), str(script)]]
+            )
+        else:
+            line = (
+                f"0 21 * * * cd {root} && {py} {script} "
+                f">> {root}/logs/race_day_evening_functional_test_cron.log 2>&1"
+            )
+            try:
+                existing = subprocess.run(
+                    ["crontab", "-l"], capture_output=True, text=True, timeout=15
+                )
+                text = existing.stdout or ""
+                if "race_day_evening_functional_test.py" not in text:
+                    new = (text.rstrip() + "\n" + line + "\n").lstrip()
+                    cp = subprocess.run(
+                        ["crontab", "-"],
+                        input=new,
+                        text=True,
+                        capture_output=True,
+                        timeout=15,
+                    )
+                    ok_run = cp.returncode == 0
+                    note = f"crontab-install rc={cp.returncode}"
+                else:
+                    ok_run, note = True, "crontab already present"
+            except Exception as e:
+                ok_run, note = False, f"{type(e).__name__}:{e}"
+    else:
+        ok_run, note = _run_bootstrap_curl(
+            "tools/yokuumakun_race_day_evening_functional_test/bootstrap_on_server.sh",
+            root,
+        )
     ok_chk, detail, _ = check_evening_schedule_armed()
     return AutofixResult("evening_schedule_armed", True, ok_chk and ok_run, f"{detail}; {note}")
 

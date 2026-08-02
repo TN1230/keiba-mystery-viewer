@@ -14,34 +14,19 @@
 | **20:00** | stop + latest clear |
 | **21:00** | 全日チェック＋安全な自動修正＋Discord 報告 |
 
-## 推奨: Windows LAN（paramiko）
+## 運用方針（Cloud Agent 不使用）
 
-クラウド Agent からは `192.168.128.178` の SSH が届かないことが多いです。  
-**自宅 Windows（同一 LAN）** から、以前と同じ方式で適用します。
+日常運用に Cloud Agent やサーバへの手貼りコマンドは使いません。  
+入口は **`tools/yokuumakun_lan_ops`** です。
 
 ```powershell
-cd tools\yokuumakun_race_day_timetable
+cd tools\yokuumakun_lan_ops
 powershell -ExecutionPolicy Bypass -File deploy_from_windows.ps1
 ```
 
-パスワードは次のいずれか:
+詳細: [`../yokuumakun_lan_ops/README.md`](../yokuumakun_lan_ops/README.md)
 
-1. 環境変数 `YOKUMAKUN_SSH_PASS` / `YOKUU_SSH_PASS`
-2. Desktop の `ローカルサーバーIP.txt` 内 `pass: …`
-
-成功時は `_deploy_race_day_timetable_out.txt` に `RESULT: SUCCESS` と timer/cron 一覧が出ます。  
-SFTP でパックを上げてサーバー上で適用するため、GitHub raw の CDN キャッシュ問題は起きません。
-
-## 代替: サーバー直実行
-
-```bash
-export YOKUMAKUN_SUDO_PASS='実際のsudoパスワード'
-REF=cursor/race-day-timetable-guard-19c2
-SHA=$(curl -fsSL "https://api.github.com/repos/t-orz/keiba-mystery-viewer/commits/${REF}" \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["sha"])')
-curl -fsSL "https://raw.githubusercontent.com/t-orz/keiba-mystery-viewer/${SHA}/tools/yokuumakun_race_day_timetable/bootstrap_on_server.sh" \
-  | bash -s -- "$SHA"
-```
+このディレクトリの `deploy_paramiko.py` は lan_ops から呼ばれる実装本体です。
 
 ## 確認
 

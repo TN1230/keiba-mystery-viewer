@@ -123,6 +123,10 @@ echo ""
 echo "######## evening functional test ########"
 cp -f "$EVE/race_day_evening_functional_test.py" "$DEST/race_day_evening_functional_test.py"
 chmod +x "$DEST/race_day_evening_functional_test.py"
+if [[ -f "$EVE/install_crontab.sh" ]]; then
+  cp -f "$EVE/install_crontab.sh" "$DEST/install_evening_crontab.sh"
+  chmod +x "$DEST/install_evening_crontab.sh"
+fi
 "$PY" -m py_compile "$DEST/race_day_evening_functional_test.py"
 if [[ -f "$EVE/install_crontab.sh" ]]; then
   bash "$EVE/install_crontab.sh" "$ROOT" "$DEST/race_day_evening_functional_test.py"
