@@ -96,6 +96,14 @@ UPLOAD_MAP: list[tuple[Path, str]] = [
         REPO_TOOLS / "yokuumakun_lan_site_publish" / "clear_latest_public_snapshot.py",
         "publish/clear_latest_public_snapshot.py",
     ),
+    (
+        REPO_TOOLS / "yokuumakun_lan_site_publish" / "morning_bulk_rerun.py",
+        "publish/morning_bulk_rerun.py",
+    ),
+    (
+        REPO_TOOLS / "yokuumakun_lan_site_publish" / "install_morning_bulk_rerun_guard.py",
+        "publish/install_morning_bulk_rerun_guard.py",
+    ),
 ]
 
 

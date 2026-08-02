@@ -143,7 +143,7 @@ else
   fi
 fi
 
-# ---- publish watch (EOD-safe) ----
+# ---- publish watch (EOD-safe) + morning-bulk rerun guard ----
 PUB="$BASE/publish"
 echo ""
 echo "######## publish watch (EOD-safe) ########"
@@ -154,6 +154,20 @@ fi
 if [[ -f "$PUB/clear_latest_public_snapshot.py" ]]; then
   cp -f "$PUB/clear_latest_public_snapshot.py" "$ROOT/clear_latest_public_snapshot.py"
   echo "INFO: installed $ROOT/clear_latest_public_snapshot.py"
+fi
+if [[ -f "$PUB/morning_bulk_rerun.py" ]]; then
+  cp -f "$PUB/morning_bulk_rerun.py" "$ROOT/morning_bulk_rerun.py"
+  echo "INFO: installed $ROOT/morning_bulk_rerun.py"
+fi
+if [[ -f "$PUB/install_morning_bulk_rerun_guard.py" ]]; then
+  echo "INFO: patch admin morning-bulk-rerun (verify worker start)"
+  set +e
+  "$PY" "$PUB/install_morning_bulk_rerun_guard.py" "$ROOT"
+  echo "INFO: install_morning_bulk_rerun_guard rc=$?"
+  "$PY" -m py_compile "$ROOT/admin_panel_api.py" "$ROOT/morning_bulk_rerun.py" 2>/dev/null
+  printf '%s\n' "$SUDO_PASS" | sudo -S -p '' systemctl restart yokuum-admin-panel.service
+  echo "INFO: admin panel restart rc=$?"
+  set -e
 fi
 
 echo ""
