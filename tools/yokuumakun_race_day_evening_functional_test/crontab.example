@@ -1,0 +1,4 @@
+# 開催日 21:00 機能動作テスト → テストWebhook報告
+# システム時計が JST であること（timedatectl で Asia/Tokyo を確認）
+# race_day_stop（通常 20:00）の後に動かす。stop スクリプトには埋め込まない。
+0 21 * * * cd /opt/yokuumakun_auto-x && /opt/yokuumakun_auto-x/.venv/bin/python /opt/yokuumakun_auto-x/server_deployment/race_day_evening_functional_test.py >> /opt/yokuumakun_auto-x/logs/race_day_evening_functional_test_cron.log 2>&1
