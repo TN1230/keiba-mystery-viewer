@@ -9,18 +9,31 @@ from unittest import mock
 
 
 class MorningBulkRerunLogicTest(unittest.TestCase):
-    def test_already_running_is_ok(self):
+    def test_clears_done_flags_before_spawn(self):
         import morning_bulk_rerun as m
 
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            logs = root / "logs"
+            logs.mkdir()
+            flag = logs / "morning_bulk_done_2026-08-02.flag"
+            flag.write_text("ok", encoding="utf-8")
             (root / "morning_bulk_server_worker.py").write_text("# stub\n", encoding="utf-8")
-            with mock.patch.object(m, "find_worker_pids", return_value=[4321]):
-                with mock.patch.object(m, "_service_active", return_value="active"):
-                    out = m.start_morning_bulk_rerun(root)
+            with mock.patch.object(m, "_today_jst", return_value="2026-08-02"):
+                with mock.patch.object(m, "stop_existing_workers", return_value=[]):
+                    with mock.patch.object(
+                        m, "ensure_automation_active", return_value=(True, "automation=active")
+                    ):
+                        with mock.patch.object(
+                            m, "start_worker", return_value=(True, "spawned pid=9", 9)
+                        ):
+                            with mock.patch.object(
+                                m, "wait_worker_running", return_value=(True, [9])
+                            ):
+                                out = m.start_morning_bulk_rerun(root, verify_sec=1)
         self.assertTrue(out["ok"])
-        self.assertTrue(out["already_running"])
-        self.assertIn("動作中", out["message"])
+        self.assertIn("morning_bulk_done_2026-08-02.flag", out.get("cleared_flags") or [])
+        self.assertFalse(flag.exists())
 
     def test_fails_when_automation_stays_inactive(self):
         import morning_bulk_rerun as m
@@ -28,11 +41,12 @@ class MorningBulkRerunLogicTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "morning_bulk_server_worker.py").write_text("# stub\n", encoding="utf-8")
-            with mock.patch.object(m, "find_worker_pids", return_value=[]):
-                with mock.patch.object(
-                    m, "ensure_automation_active", return_value=(False, "automation=inactive")
-                ):
-                    out = m.start_morning_bulk_rerun(root)
+            with mock.patch.object(m, "stop_existing_workers", return_value=[]):
+                with mock.patch.object(m, "clear_morning_bulk_flags", return_value=[]):
+                    with mock.patch.object(
+                        m, "ensure_automation_active", return_value=(False, "automation=inactive")
+                    ):
+                        out = m.start_morning_bulk_rerun(root)
         self.assertFalse(out["ok"])
         self.assertEqual(out.get("error"), "automation_inactive")
 
@@ -42,22 +56,22 @@ class MorningBulkRerunLogicTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "morning_bulk_server_worker.py").write_text("# stub\n", encoding="utf-8")
-            with mock.patch.object(m, "find_worker_pids", return_value=[]):
-                with mock.patch.object(
-                    m, "ensure_automation_active", return_value=(True, "automation=active")
-                ):
+            with mock.patch.object(m, "stop_existing_workers", return_value=[]):
+                with mock.patch.object(m, "clear_morning_bulk_flags", return_value=[]):
                     with mock.patch.object(
-                        m, "start_worker", return_value=(True, "spawned pid=9", 9)
+                        m, "ensure_automation_active", return_value=(True, "automation=active")
                     ):
                         with mock.patch.object(
-                            m, "wait_worker_running", return_value=(True, [9])
+                            m, "start_worker", return_value=(True, "spawned pid=9", 9)
                         ):
-                            out = m.start_morning_bulk_rerun(root, verify_sec=1)
+                            with mock.patch.object(
+                                m, "wait_worker_running", return_value=(True, [9])
+                            ):
+                                out = m.start_morning_bulk_rerun(root, verify_sec=1)
         self.assertTrue(out["ok"])
         self.assertTrue(out["worker_running"])
         self.assertIn("起動しました", out["message"])
         self.assertIn("起動確認済み", out["message"])
-
 
 class InstallGuardTest(unittest.TestCase):
     def test_replaces_handler_and_keeps_route(self):

@@ -176,6 +176,57 @@ def find_worker_pids() -> list[int]:
     return out
 
 
+def _today_jst() -> str:
+    # local import keeps module light for unit tests
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d")
+
+
+def clear_morning_bulk_flags(root: Path, *, day: str | None = None) -> list[str]:
+    """Allow forced re-run even if a (possibly empty) done flag exists."""
+    logs = root / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    today = day or _today_jst()
+    removed: list[str] = []
+    patterns = (
+        f"morning_bulk_done_*{today}.flag",
+        f"morning_bulk_done_{today}.flag",
+        f"morning_bulk_attempted_*{today}.json",
+        f"morning_bulk_attempted_{today}.json",
+    )
+    seen: set[Path] = set()
+    for pat in patterns:
+        for p in logs.glob(pat):
+            if p in seen:
+                continue
+            seen.add(p)
+            try:
+                p.unlink()
+                removed.append(p.name)
+            except OSError:
+                pass
+    return removed
+
+
+def stop_existing_workers() -> list[int]:
+    pids = find_worker_pids()
+    if not pids:
+        return []
+    try:
+        subprocess.run(
+            ["pkill", "-f", WORKER_NAME],
+            check=False,
+            capture_output=True,
+            timeout=15,
+        )
+    except Exception:
+        pass
+    time.sleep(1.0)
+    return pids
+
+
 def start_worker(*, root: Path) -> tuple[bool, str, int | None]:
     worker = root / WORKER_NAME
     if not worker.is_file():
@@ -190,6 +241,9 @@ def start_worker(*, root: Path) -> tuple[bool, str, int | None]:
     env.setdefault("TZ", "Asia/Tokyo")
     env.setdefault("HWM_SERVER_AUTO", "1")
     env.setdefault("HWM_SUBPROCESS_PREDICT", "1")
+    # admin forced rerun slot label (worker/automation may read)
+    env.setdefault("HWM_MORNING_BULK_FORCE", "1")
+    env.setdefault("HWM_MORNING_BULK_SLOT", "admin")
 
     try:
         logf = open(log_path, "a", encoding="utf-8")
@@ -209,6 +263,7 @@ def start_worker(*, root: Path) -> tuple[bool, str, int | None]:
             stdout=logf,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            stdin=subprocess.DEVNULL,
         )
     except Exception as e:
         if hasattr(logf, "close"):
@@ -262,23 +317,12 @@ def start_morning_bulk_rerun(
         "message": "",
     }
 
-    existing = find_worker_pids()
-    if existing:
-        result.update(
-            {
-                "ok": True,
-                "automation_active": _service_active(svc) == "active",
-                "worker_running": True,
-                "worker_pids": existing,
-                "message": (
-                    f"既に一斉予想ワーカーが動作中です (pid={existing[0]}"
-                    + (f" 他{len(existing)-1}" if len(existing) > 1 else "")
-                    + ")。完了までログを監視してください。"
-                ),
-                "already_running": True,
-            }
-        )
-        return result
+    # Forced admin re-run: stop stale worker and clear done/attempted flags first.
+    # (Otherwise a hollow "done" flag makes the job look finished with no predictions.)
+    stopped = stop_existing_workers()
+    cleared = clear_morning_bulk_flags(root_p)
+    result["stopped_pids"] = stopped
+    result["cleared_flags"] = cleared
 
     auto_ok, auto_note = ensure_automation_active(root=root_p, service=svc)
     result["automation_active"] = auto_ok
