@@ -102,7 +102,6 @@ def main() -> int:
             "race_course_distance.py",
             "race_pace_label.py",
             "install_publish_endpoint.py",
-            "install_remote_bootstrap_endpoint.py",
             "morning_bulk_publish_watch.py",
             "install_daily_publish_watch.py",
             "yokuum-morning-publish-watch.service.example",
@@ -121,7 +120,6 @@ def main() -> int:
                 f"python3 {remote_tmp}/patch_worker_publish_on_success.py {REMOTE_ROOT}",
                 f"python3 {remote_tmp}/patch_pre_race_publish_on_success.py {REMOTE_ROOT}",
                 f"python3 {remote_tmp}/install_publish_endpoint.py {REMOTE_ROOT}",
-                f"python3 {remote_tmp}/install_remote_bootstrap_endpoint.py {REMOTE_ROOT} || true",
                 f"cp {remote_tmp}/force_publish_public_snapshot.py "
                 f"{remote_tmp}/morning_bulk_publish_watch.py "
                 f"{remote_tmp}/viewer_publish_wake.py "

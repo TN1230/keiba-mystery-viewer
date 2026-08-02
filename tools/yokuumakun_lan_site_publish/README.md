@@ -26,8 +26,6 @@
    発走間近は「【異常・発走間近】」として通知し、未解消なら直後に再試行する
    （馬券購入時間を確保するため）。
 7. admin の `IndentationError` 時はバックアップから自動復旧
-8. 管理画面「② 閲覧サイト強制公開」＋ `POST /admin/remote-bootstrap` の
-   `install_lan_site_publish` / `force_publish`
 
 ## 今すぐレースをサイトへ反映 / 品質修復（最短）
 ```bash

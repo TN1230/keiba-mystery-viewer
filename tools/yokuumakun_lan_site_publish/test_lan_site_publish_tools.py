@@ -792,41 +792,6 @@ def datetime_now_iso_fresh() -> str:
     return datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-class RemoteBootstrapInstallTests(unittest.TestCase):
-    def test_install_compiles(self) -> None:
-        from install_remote_bootstrap_endpoint import install
-
-        sample = '''#!/usr/bin/env python3
-import sys
-import json
-from typing import Any
-
-class H:
-    def _require_session(self):
-        return "t", {}
-    def _handle_publish_public_snapshot(self) -> None:
-        pass
-    def do_POST(self):
-        path = "/x"
-        if path == "/admin/publish-public-snapshot":
-            self._handle_publish_public_snapshot()
-            return
-'''
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "admin_panel_api.py").write_text(sample, encoding="utf-8")
-            install(root)
-            text = (root / "admin_panel_api.py").read_text(encoding="utf-8")
-            compile(text, "admin_panel_api.py", "exec")
-            self.assertIn("/admin/remote-bootstrap", text)
-            self.assertIn("install_lan_site_publish", text)
-            # re-install idempotent
-            install(root)
-            text2 = (root / "admin_panel_api.py").read_text(encoding="utf-8")
-            compile(text2, "admin_panel_api.py", "exec")
-            self.assertEqual(text2.count("def _handle_remote_bootstrap"), 1)
-
-
 class PaceLabelTests(unittest.TestCase):
     def test_normalize_known_labels(self) -> None:
         from race_pace_label import normalize_pace_label

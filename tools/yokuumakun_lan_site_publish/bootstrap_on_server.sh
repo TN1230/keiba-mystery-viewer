@@ -46,7 +46,6 @@ for f in \
   race_course_distance.py \
   race_pace_label.py \
   install_publish_endpoint.py \
-  install_remote_bootstrap_endpoint.py \
   morning_bulk_publish_watch.py \
   install_daily_publish_watch.py \
   upload_bootstrap_status.py \
@@ -63,8 +62,6 @@ if [[ -f "$ROOT/admin_panel_api.py" ]]; then
     echo "WARN: admin_panel_api.py broken — restoring backup before publish"
     if [[ -f "$ROOT/admin_panel_api.py.bak_publish_endpoint" ]]; then
       cp -f "$ROOT/admin_panel_api.py.bak_publish_endpoint" "$ROOT/admin_panel_api.py"
-    elif [[ -f "$ROOT/admin_panel_api.py.bak_remote_bootstrap" ]]; then
-      cp -f "$ROOT/admin_panel_api.py.bak_remote_bootstrap" "$ROOT/admin_panel_api.py"
     fi
   fi
 fi
@@ -94,8 +91,6 @@ python3 "$TMP/patch_pre_race_publish_on_success.py" "$ROOT"
 echo "patch_pre_race rc=$?"
 python3 "$TMP/install_publish_endpoint.py" "$ROOT"
 echo "install_publish_endpoint rc=$?"
-python3 "$TMP/install_remote_bootstrap_endpoint.py" "$ROOT"
-echo "install_remote_bootstrap rc=$?"
 cp -f "$TMP/morning_bulk_publish_watch.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/viewer_publish_wake.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/race_course_distance.py" "$ROOT/" 2>/dev/null || true
@@ -114,11 +109,7 @@ if [[ "$ADMIN_COMPILE" -ne 0 ]]; then
   if [[ -f admin_panel_api.py.bak_publish_endpoint ]]; then
     cp -f admin_panel_api.py.bak_publish_endpoint admin_panel_api.py
     echo "restored from bak_publish_endpoint"
-    # publish endpoint のみ再適用（remote-bootstrap は壊すのでスキップ）
     python3 "$TMP/install_publish_endpoint.py" "$ROOT" || true
-  elif [[ -f admin_panel_api.py.bak_remote_bootstrap ]]; then
-    cp -f admin_panel_api.py.bak_remote_bootstrap admin_panel_api.py
-    echo "restored from bak_remote_bootstrap"
   fi
   .venv/bin/python -m py_compile admin_panel_api.py
   echo "py_compile_admin_after_restore rc=$?"
