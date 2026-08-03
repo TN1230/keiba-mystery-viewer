@@ -715,7 +715,11 @@
 
   async function runAction(btn, path, confirmMsg) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
-    setStatus(menuStatus, "実行中…");
+    const isMorningBulk = path.indexOf("/admin/morning-bulk-rerun") >= 0;
+    setStatus(
+      menuStatus,
+      isMorningBulk ? "起動確認中…（最大数十秒）" : "実行中…"
+    );
     btn.disabled = true;
     try {
       const token = getToken();
@@ -729,10 +733,18 @@
         return;
       }
       if (!res.ok || !data.ok) {
-        setStatus(menuStatus, data.message || "実行に失敗しました", "error");
+        setStatus(
+          menuStatus,
+          data.message || data.error || "実行に失敗しました",
+          "error"
+        );
         return;
       }
-      setStatus(menuStatus, data.message || "完了しました", "ok");
+      // 一斉予想は「予想完了」ではなく「ワーカー起動確認」まで
+      const okMsg = isMorningBulk
+        ? data.message || "一斉予想ワーカーの起動を確認しました"
+        : data.message || "完了しました";
+      setStatus(menuStatus, okMsg, "ok");
     } catch (e) {
       setStatus(menuStatus, e.message || String(e), "error");
     } finally {
@@ -744,7 +756,7 @@
     runAction(
       btnMorningBulk,
       "/admin/morning-bulk-rerun",
-      "一斉予想を再実行します。ログアウト後もサーバー上で処理は継続します。よろしいですか？"
+      "一斉予想ワーカーを起動します。予想そのものの完了ではなく、プロセス起動を確認して結果を返します。よろしいですか？"
     );
   });
 

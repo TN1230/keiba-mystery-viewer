@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer: race-day morning start at 05:00 JST every day
+
+[Timer]
+OnCalendar=*-*-* 05:00:00 Asia/Tokyo
+AccuracySec=30s
+Persistent=true
+Unit=yokuum-race-day-start.service
+
+[Install]
+WantedBy=timers.target

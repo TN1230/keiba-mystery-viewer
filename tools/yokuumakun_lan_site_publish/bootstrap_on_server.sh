@@ -47,6 +47,8 @@ for f in \
   race_pace_label.py \
   install_publish_endpoint.py \
   install_remote_bootstrap_endpoint.py \
+  morning_bulk_rerun.py \
+  install_morning_bulk_rerun_guard.py \
   morning_bulk_publish_watch.py \
   install_daily_publish_watch.py \
   upload_bootstrap_status.py \
@@ -96,6 +98,9 @@ python3 "$TMP/install_publish_endpoint.py" "$ROOT"
 echo "install_publish_endpoint rc=$?"
 python3 "$TMP/install_remote_bootstrap_endpoint.py" "$ROOT"
 echo "install_remote_bootstrap rc=$?"
+cp -f "$TMP/morning_bulk_rerun.py" "$ROOT/" 2>/dev/null || true
+python3 "$TMP/install_morning_bulk_rerun_guard.py" "$ROOT"
+echo "install_morning_bulk_rerun_guard rc=$?"
 cp -f "$TMP/morning_bulk_publish_watch.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/viewer_publish_wake.py" "$ROOT/" 2>/dev/null || true
 cp -f "$TMP/race_course_distance.py" "$ROOT/" 2>/dev/null || true
@@ -104,18 +109,24 @@ mkdir -p "$ROOT/server_deployment"
 cp -f "$TMP"/yokuum-morning-publish-watch.*.example "$ROOT/server_deployment/" 2>/dev/null || true
 cd "$ROOT"
 set +e
-.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py viewer_publish_wake.py race_course_distance.py race_pace_label.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
+.venv/bin/python -m py_compile force_publish_public_snapshot.py morning_bulk_publish_watch.py morning_bulk_rerun.py viewer_publish_wake.py race_course_distance.py race_pace_label.py morning_bulk_server_worker.py pre_race_auto_predict_worker.py
 echo "py_compile_tools rc=$?"
 .venv/bin/python -m py_compile admin_panel_api.py
 ADMIN_COMPILE=$?
 echo "py_compile_admin rc=$ADMIN_COMPILE"
 if [[ "$ADMIN_COMPILE" -ne 0 ]]; then
   echo "WARN: admin_panel_api.py indent/syntax broken — restoring backups"
-  if [[ -f admin_panel_api.py.bak_publish_endpoint ]]; then
+  if [[ -f admin_panel_api.py.bak_morning_bulk_rerun_guard ]]; then
+    cp -f admin_panel_api.py.bak_morning_bulk_rerun_guard admin_panel_api.py
+    echo "restored from bak_morning_bulk_rerun_guard"
+    python3 "$TMP/install_publish_endpoint.py" "$ROOT" || true
+    python3 "$TMP/install_morning_bulk_rerun_guard.py" "$ROOT" || true
+  elif [[ -f admin_panel_api.py.bak_publish_endpoint ]]; then
     cp -f admin_panel_api.py.bak_publish_endpoint admin_panel_api.py
     echo "restored from bak_publish_endpoint"
     # publish endpoint のみ再適用（remote-bootstrap は壊すのでスキップ）
     python3 "$TMP/install_publish_endpoint.py" "$ROOT" || true
+    python3 "$TMP/install_morning_bulk_rerun_guard.py" "$ROOT" || true
   elif [[ -f admin_panel_api.py.bak_remote_bootstrap ]]; then
     cp -f admin_panel_api.py.bak_remote_bootstrap admin_panel_api.py
     echo "restored from bak_remote_bootstrap"
@@ -123,6 +134,8 @@ if [[ "$ADMIN_COMPILE" -ne 0 ]]; then
   .venv/bin/python -m py_compile admin_panel_api.py
   echo "py_compile_admin_after_restore rc=$?"
 fi
+# admin API に新ハンドラを載せる
+sudo_run systemctl restart yokuum-admin-panel.service || true
 python3 "$TMP/install_daily_publish_watch.py" "$ROOT"
 echo "timer_install rc=$?"
 set +e

@@ -20,6 +20,7 @@ def main() -> int:
         "viewer_publish_wake.py",
         "race_course_distance.py",
         "race_pace_label.py",
+        "clear_latest_public_snapshot.py",
     ):
         src = here / name
         dst = root / name

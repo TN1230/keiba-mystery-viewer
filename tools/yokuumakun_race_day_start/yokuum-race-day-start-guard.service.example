@@ -1,0 +1,13 @@
+[Unit]
+Description=yokuumakun race-day start miss-guard (05:15 JST)
+After=network-online.target yokuum-race-day-start.service
+
+[Service]
+Type=oneshot
+User=tn
+WorkingDirectory=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_ROOT=/opt/yokuumakun_auto-x
+Environment=YOKUMAKUN_SERVER_AUTO_SERVICE=yokuum-server-automation-x.service
+Environment=TZ=Asia/Tokyo
+ExecStart=/opt/yokuumakun_auto-x/.venv/bin/python3 /opt/yokuumakun_auto-x/server_deployment/race_day_start_miss_watch.py
+Nice=5
