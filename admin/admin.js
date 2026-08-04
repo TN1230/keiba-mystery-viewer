@@ -38,6 +38,7 @@
   const btnRaceSimOpen = document.getElementById("btnRaceSimOpen");
   const btnRaceSimClose = document.getElementById("btnRaceSimClose");
   const RACE_SIM_JOB_KEY = "kmv_admin_race_sim_job";
+  const RACE_SIM_RACE_KEY = "kmv_admin_race_sim_race";
   let raceSimPollTimer = null;
 
 
@@ -530,6 +531,24 @@
     }
   }
 
+  /** 全角数字を半角にし、数字以外を落とす。 */
+  function normalizeRaceId(raw) {
+    return String(raw || "")
+      .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+      .replace(/\D/g, "");
+  }
+
+  /** 「展開を開く」は、生成済みジョブと入力欄のレースIDが一致するときだけ押せる。 */
+  function syncRaceSimOpenButton() {
+    if (!btnRaceSimOpen) return;
+    const jobId = sessionStorage.getItem(RACE_SIM_JOB_KEY);
+    const jobRace = sessionStorage.getItem(RACE_SIM_RACE_KEY) || "";
+    const typed = normalizeRaceId(raceSimId && raceSimId.value);
+    const ready = Boolean(jobId) && (!typed || !jobRace || typed === jobRace);
+    btnRaceSimOpen.disabled = !ready;
+    btnRaceSimOpen.textContent = jobRace ? `展開を開く（${jobRace}）` : "展開を開く";
+  }
+
   function setRaceSimLog(text) {
     if (!raceSimLog) return;
     const t = String(text || "").trim();
@@ -555,9 +574,21 @@
 
   async function openRaceSimResult() {
     const jobId = sessionStorage.getItem(RACE_SIM_JOB_KEY);
+    const jobRace = sessionStorage.getItem(RACE_SIM_RACE_KEY) || "";
     const token = getToken();
     if (!jobId || !token) {
       setStatus(raceSimStatus, "開ける結果がありません。先に生成してください。", "error");
+      return;
+    }
+    // 入力欄のレースIDを変えただけでは中身は変わらない。取り違えを防ぐ。
+    const typed = normalizeRaceId(raceSimId.value);
+    if (typed && jobRace && typed !== jobRace) {
+      setStatus(
+        raceSimStatus,
+        `入力欄は ${typed} ですが、生成済みなのは ${jobRace} です。` +
+          "このレースを見るには「生成を開始」を押してください。",
+        "error"
+      );
       return;
     }
     // ポップアップブロック回避のためクリック直後に空タブを開いておく
@@ -611,9 +642,13 @@
     setRaceSimLog(data.log_tail);
     if (data.state === "done") {
       stopRaceSimPoll();
-      btnRaceSimOpen.disabled = false;
       btnRaceSimRun.disabled = false;
-      setStatus(raceSimStatus, "生成が完了しました。「展開を開く」を押してください。", "ok");
+      syncRaceSimOpenButton();
+      setStatus(
+        raceSimStatus,
+        `レース ${data.race_id} の生成が完了しました。「展開を開く」を押してください。`,
+        "ok"
+      );
       return;
     }
     if (data.state === "failed") {
@@ -630,9 +665,7 @@
     if (raceSimPanel) raceSimPanel.hidden = false;
     if (logsPanel) logsPanel.hidden = true;
     setStatus(menuStatus, "");
-    if (sessionStorage.getItem(RACE_SIM_JOB_KEY)) {
-      btnRaceSimOpen.disabled = false;
-    }
+    syncRaceSimOpenButton();
   });
 
   btnRaceSimClose.addEventListener("click", () => {
@@ -641,9 +674,7 @@
   });
 
   btnRaceSimRun.addEventListener("click", async () => {
-    const rid = String(raceSimId.value || "")
-      .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-      .replace(/\D/g, "");
+    const rid = normalizeRaceId(raceSimId.value);
     if (rid.length !== 12) {
       setStatus(raceSimStatus, "レースIDは12桁の数字で入力してください。", "error");
       return;
@@ -657,6 +688,8 @@
     stopRaceSimPoll();
     btnRaceSimRun.disabled = true;
     btnRaceSimOpen.disabled = true;
+    sessionStorage.removeItem(RACE_SIM_JOB_KEY);
+    sessionStorage.removeItem(RACE_SIM_RACE_KEY);
     setRaceSimLog("");
     setStatus(raceSimStatus, "開始しています…");
     try {
@@ -679,6 +712,7 @@
         return;
       }
       sessionStorage.setItem(RACE_SIM_JOB_KEY, data.job_id);
+      sessionStorage.setItem(RACE_SIM_RACE_KEY, rid);
       setStatus(raceSimStatus, data.message || "生成中…");
       raceSimPollTimer = setTimeout(() => pollRaceSim(data.job_id), 5000);
     } catch (e) {
@@ -688,6 +722,7 @@
   });
 
   btnRaceSimOpen.addEventListener("click", openRaceSimResult);
+  raceSimId.addEventListener("input", syncRaceSimOpenButton);
 
   btnLogout.addEventListener("click", async () => {
     await forceLogout(
