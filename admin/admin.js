@@ -27,6 +27,18 @@
   const logsStatus = document.getElementById("logsStatus");
   const btnLogsRefresh = document.getElementById("btnLogsRefresh");
   const btnLogsClose = document.getElementById("btnLogsClose");
+  const btnRaceSim = document.getElementById("btnRaceSim");
+  const raceSimPanel = document.getElementById("raceSimPanel");
+  const raceSimId = document.getElementById("raceSimId");
+  const raceSimWeather = document.getElementById("raceSimWeather");
+  const raceSimBaba = document.getElementById("raceSimBaba");
+  const raceSimStatus = document.getElementById("raceSimStatus");
+  const raceSimLog = document.getElementById("raceSimLog");
+  const btnRaceSimRun = document.getElementById("btnRaceSimRun");
+  const btnRaceSimOpen = document.getElementById("btnRaceSimOpen");
+  const btnRaceSimClose = document.getElementById("btnRaceSimClose");
+  const RACE_SIM_JOB_KEY = "kmv_admin_race_sim_job";
+  let raceSimPollTimer = null;
 
 
   function setStatus(el, message, kind) {
@@ -125,6 +137,9 @@
     loginPanel.hidden = false;
     menuPanel.hidden = true;
     if (logsPanel) logsPanel.hidden = true;
+    // 生成自体はサーバー側で続くので job_id は残し、画面と監視だけ止める
+    if (raceSimPanel) raceSimPanel.hidden = true;
+    stopRaceSimPoll();
   }
 
   function showMenu() {
@@ -449,18 +464,12 @@
           await forceLogout("セッションがありません。再ログインしてください。");
           return;
         }
-        let { res, data } = await api("/admin/publish-public-snapshot", {
+        // フォールバック先だった /admin/remote-bootstrap は GitHub 上のスクリプトを
+        // 実行するエンドポイントとして意図的に削除済みなので呼ばない。
+        const { res, data } = await api("/admin/publish-public-snapshot", {
           method: "POST",
           token,
         });
-        // エンドポイント未導入時は remote-bootstrap の force_publish にフォールバック
-        if (res.status === 404) {
-          ({ res, data } = await api("/admin/remote-bootstrap", {
-            method: "POST",
-            token,
-            body: { action: "force_publish" },
-          }));
-        }
         if (res.status === 401) {
           await forceLogout(
             "セッションが切れました。開始済みの処理はサーバー上で継続している場合があります。再ログインしてください。"
@@ -511,6 +520,174 @@
     if (logsPanel) logsPanel.hidden = true;
     setStatus(menuStatus, "");
   });
+
+  /* ---------- ⑤ 展開シミュレーション ---------- */
+
+  function stopRaceSimPoll() {
+    if (raceSimPollTimer) {
+      clearTimeout(raceSimPollTimer);
+      raceSimPollTimer = null;
+    }
+  }
+
+  function setRaceSimLog(text) {
+    if (!raceSimLog) return;
+    const t = String(text || "").trim();
+    raceSimLog.textContent = t;
+    raceSimLog.hidden = !t;
+  }
+
+  /** 別タブ表示用に HTML を取得する。認証は既存の Bearer をそのまま使う。 */
+  async function fetchRaceSimHtml(jobId, token) {
+    const base = await resolveApiBase();
+    const res = await fetch(
+      `${base}/admin/race-sim/result?job=${encodeURIComponent(jobId)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        mode: "cors",
+        cache: "no-store",
+      }
+    );
+    if (res.status === 401) throw new Error("セッションが切れました。再ログインしてください。");
+    if (!res.ok) throw new Error(`まだ生成が終わっていません (HTTP ${res.status})`);
+    return res.text();
+  }
+
+  async function openRaceSimResult() {
+    const jobId = sessionStorage.getItem(RACE_SIM_JOB_KEY);
+    const token = getToken();
+    if (!jobId || !token) {
+      setStatus(raceSimStatus, "開ける結果がありません。先に生成してください。", "error");
+      return;
+    }
+    // ポップアップブロック回避のためクリック直後に空タブを開いておく
+    const tab = window.open("", "_blank");
+    setStatus(raceSimStatus, "展開を読み込み中…");
+    try {
+      const html = await fetchRaceSimHtml(jobId, token);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      if (tab) {
+        tab.location = url;
+      } else {
+        setStatus(
+          raceSimStatus,
+          "別タブを開けませんでした。ポップアップを許可してもう一度お試しください。",
+          "error"
+        );
+        return;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setStatus(raceSimStatus, "別タブに展開を表示しました。", "ok");
+    } catch (e) {
+      if (tab) tab.close();
+      setStatus(raceSimStatus, e.message || String(e), "error");
+    }
+  }
+
+  async function pollRaceSim(jobId) {
+    const token = getToken();
+    if (!token) {
+      stopRaceSimPoll();
+      return;
+    }
+    const { res, data } = await api(
+      `/admin/race-sim/status?job=${encodeURIComponent(jobId)}`,
+      { token, silent: true }
+    );
+    if (res.status === 401) {
+      stopRaceSimPoll();
+      setStatus(
+        raceSimStatus,
+        "セッションが切れました。生成はサーバー上で継続しています。再ログイン後に「展開を開く」で表示できます。",
+        "error"
+      );
+      return;
+    }
+    if (!data || !data.ok) {
+      stopRaceSimPoll();
+      setStatus(raceSimStatus, (data && data.message) || "状態を取得できませんでした", "error");
+      return;
+    }
+    setRaceSimLog(data.log_tail);
+    if (data.state === "done") {
+      stopRaceSimPoll();
+      btnRaceSimOpen.disabled = false;
+      btnRaceSimRun.disabled = false;
+      setStatus(raceSimStatus, "生成が完了しました。「展開を開く」を押してください。", "ok");
+      return;
+    }
+    if (data.state === "failed") {
+      stopRaceSimPoll();
+      btnRaceSimRun.disabled = false;
+      setStatus(raceSimStatus, data.message || "生成に失敗しました", "error");
+      return;
+    }
+    setStatus(raceSimStatus, data.message || "生成中…");
+    raceSimPollTimer = setTimeout(() => pollRaceSim(jobId), 5000);
+  }
+
+  btnRaceSim.addEventListener("click", () => {
+    if (raceSimPanel) raceSimPanel.hidden = false;
+    if (logsPanel) logsPanel.hidden = true;
+    setStatus(menuStatus, "");
+    if (sessionStorage.getItem(RACE_SIM_JOB_KEY)) {
+      btnRaceSimOpen.disabled = false;
+    }
+  });
+
+  btnRaceSimClose.addEventListener("click", () => {
+    stopRaceSimPoll();
+    if (raceSimPanel) raceSimPanel.hidden = true;
+  });
+
+  btnRaceSimRun.addEventListener("click", async () => {
+    const rid = String(raceSimId.value || "")
+      .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+      .replace(/\D/g, "");
+    if (rid.length !== 12) {
+      setStatus(raceSimStatus, "レースIDは12桁の数字で入力してください。", "error");
+      return;
+    }
+    raceSimId.value = rid;
+    const token = getToken();
+    if (!token) {
+      await forceLogout("セッションがありません。再ログインしてください。");
+      return;
+    }
+    stopRaceSimPoll();
+    btnRaceSimRun.disabled = true;
+    btnRaceSimOpen.disabled = true;
+    setRaceSimLog("");
+    setStatus(raceSimStatus, "開始しています…");
+    try {
+      const { res, data } = await api("/admin/race-sim", {
+        method: "POST",
+        token,
+        body: {
+          race_id: rid,
+          weather: raceSimWeather.value,
+          baba: raceSimBaba.value,
+        },
+      });
+      if (res.status === 401) {
+        await forceLogout("セッションが切れました。再ログインしてください。");
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        btnRaceSimRun.disabled = false;
+        setStatus(raceSimStatus, data.message || "開始できませんでした", "error");
+        return;
+      }
+      sessionStorage.setItem(RACE_SIM_JOB_KEY, data.job_id);
+      setStatus(raceSimStatus, data.message || "生成中…");
+      raceSimPollTimer = setTimeout(() => pollRaceSim(data.job_id), 5000);
+    } catch (e) {
+      btnRaceSimRun.disabled = false;
+      setStatus(raceSimStatus, e.message || String(e), "error");
+    }
+  });
+
+  btnRaceSimOpen.addEventListener("click", openRaceSimResult);
 
   btnLogout.addEventListener("click", async () => {
     await forceLogout(

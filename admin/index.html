@@ -58,9 +58,63 @@
         <button type="button" class="admin-btn admin-btn-action" id="btnForcePublish">② 閲覧サイト強制公開</button>
         <button type="button" class="admin-btn admin-btn-action" id="btnModemReboot">③ モデム再起動</button>
         <button type="button" class="admin-btn admin-btn-action" id="btnOpsLogs">④ 過去24時間の動作ログ</button>
-        <button type="button" class="admin-btn admin-btn-secondary" id="btnLogout">⑤ ログアウト</button>
+        <button type="button" class="admin-btn admin-btn-action" id="btnRaceSim">⑤ 展開シミュレーション</button>
+        <button type="button" class="admin-btn admin-btn-secondary" id="btnLogout">⑥ ログアウト</button>
       </nav>
       <p class="admin-status" id="menuStatus" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="admin-card" id="raceSimPanel" hidden>
+      <div class="admin-logs-head">
+        <h2 class="admin-section-title">⑤ 展開シミュレーション</h2>
+        <div class="admin-logs-actions">
+          <button type="button" class="admin-btn admin-btn-secondary admin-btn-small" id="btnRaceSimClose">閉じる</button>
+        </div>
+      </div>
+      <p class="admin-hint">
+        レースIDと想定条件を入れると、AI 予想をもとに展開アニメーションを生成します。
+        生成には2〜3分かかります。完了後「展開を開く」で別タブに表示します。
+      </p>
+      <div class="admin-form">
+        <label class="admin-label" for="raceSimId">レースID（12桁）</label>
+        <input
+          id="raceSimId"
+          class="admin-input"
+          type="text"
+          inputmode="numeric"
+          maxlength="12"
+          placeholder="202609030411"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <div class="admin-sim-row">
+          <div class="admin-sim-field">
+            <label class="admin-label" for="raceSimWeather">天候</label>
+            <select id="raceSimWeather" class="admin-input">
+              <option value="晴" selected>晴</option>
+              <option value="曇">曇</option>
+              <option value="小雨">小雨</option>
+              <option value="雨">雨</option>
+              <option value="雪">雪</option>
+            </select>
+          </div>
+          <div class="admin-sim-field">
+            <label class="admin-label" for="raceSimBaba">馬場状態</label>
+            <select id="raceSimBaba" class="admin-input">
+              <option value="良" selected>良</option>
+              <option value="稍重">稍重</option>
+              <option value="重">重</option>
+              <option value="不良">不良</option>
+            </select>
+          </div>
+        </div>
+        <div class="admin-sim-row">
+          <button type="button" class="admin-btn admin-btn-primary" id="btnRaceSimRun">生成を開始</button>
+          <button type="button" class="admin-btn admin-btn-action" id="btnRaceSimOpen" disabled>展開を開く</button>
+        </div>
+      </div>
+      <p class="admin-status" id="raceSimStatus" role="status" aria-live="polite"></p>
+      <pre class="admin-sim-log" id="raceSimLog" hidden></pre>
     </section>
 
     <section class="admin-card" id="logsPanel" hidden>
