@@ -37,9 +37,12 @@
   const btnRaceSimRun = document.getElementById("btnRaceSimRun");
   const btnRaceSimOpen = document.getElementById("btnRaceSimOpen");
   const btnRaceSimClose = document.getElementById("btnRaceSimClose");
+  const raceSimModeHint = document.getElementById("raceSimModeHint");
+  const btnRaceSimMode = document.getElementById("btnRaceSimMode");
   const RACE_SIM_JOB_KEY = "kmv_admin_race_sim_job";
   const RACE_SIM_RACE_KEY = "kmv_admin_race_sim_race";
   let raceSimPollTimer = null;
+  let raceSimModeState = null;
 
 
   function setStatus(el, message, kind) {
@@ -661,11 +664,79 @@
     raceSimPollTimer = setTimeout(() => pollRaceSim(jobId), 5000);
   }
 
+  function renderRaceSimMode(status) {
+    raceSimModeState = status && typeof status === "object" ? status : null;
+    if (!raceSimModeHint || !btnRaceSimMode) return;
+    if (!raceSimModeState) {
+      raceSimModeHint.textContent = "状態を取得できませんでした。";
+      btnRaceSimMode.textContent = "再読み込み";
+      btnRaceSimMode.disabled = false;
+      return;
+    }
+    const on = !!raceSimModeState.enabled;
+    const days = raceSimModeState.retention_days || 15;
+    raceSimModeHint.textContent = on
+      ? `ON（${raceSimModeState.day} 限り）— 直前予想のあとに展開図を自動生成します。生成物は${days}日で自動削除されます。`
+      : "OFF（既定）— ON にすると当日の直前予想と並行して展開図を生成します。日付が変わると自動で OFF に戻ります。";
+    btnRaceSimMode.textContent = on ? "OFF にする" : "ON にする";
+    btnRaceSimMode.setAttribute("aria-pressed", on ? "true" : "false");
+    btnRaceSimMode.disabled = false;
+  }
+
+  async function loadRaceSimMode() {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const { data } = await api("/admin/race-sim/mode", { token, silent: true });
+      renderRaceSimMode(data && data.ok ? data : null);
+    } catch {
+      renderRaceSimMode(null);
+    }
+  }
+
+  if (btnRaceSimMode) {
+    btnRaceSimMode.addEventListener("click", async () => {
+      const token = getToken();
+      if (!token) {
+        await forceLogout("セッションがありません。再ログインしてください。");
+        return;
+      }
+      if (!raceSimModeState) {
+        await loadRaceSimMode();
+        return;
+      }
+      const next = !raceSimModeState.enabled;
+      btnRaceSimMode.disabled = true;
+      try {
+        const { data } = await api("/admin/race-sim/mode", {
+          method: "POST",
+          body: { enabled: next },
+          token,
+        });
+        if (data && data.ok) {
+          renderRaceSimMode(data);
+          setStatus(
+            raceSimStatus,
+            `展開シミュレーションモードを ${next ? "ON" : "OFF"} にしました。`,
+            "ok"
+          );
+        } else {
+          btnRaceSimMode.disabled = false;
+          setStatus(raceSimStatus, (data && data.message) || "切り替えに失敗しました", "error");
+        }
+      } catch (e) {
+        btnRaceSimMode.disabled = false;
+        setStatus(raceSimStatus, e.message || String(e), "error");
+      }
+    });
+  }
+
   btnRaceSim.addEventListener("click", () => {
     if (raceSimPanel) raceSimPanel.hidden = false;
     if (logsPanel) logsPanel.hidden = true;
     setStatus(menuStatus, "");
     syncRaceSimOpenButton();
+    loadRaceSimMode();
   });
 
   btnRaceSimClose.addEventListener("click", () => {

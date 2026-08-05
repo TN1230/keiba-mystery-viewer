@@ -268,3 +268,18 @@ body.admin-body {
   max-height: 12rem;
   overflow-y: auto;
 }
+
+/* 展開シミュレーションモード（直前予想と並行生成）の切り替え */
+.admin-sim-mode {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid rgba(11, 61, 46, 0.12);
+}
+
+.admin-sim-mode .admin-label {
+  margin-bottom: 0.25rem;
+}
+
+.admin-sim-mode .admin-hint {
+  margin: 0;
+}

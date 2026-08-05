@@ -73,8 +73,24 @@
       </div>
       <p class="admin-hint">
         レースIDと想定条件を入れると、AI 予想をもとに展開アニメーションを生成します。
-        生成には2〜3分かかります。完了後「展開を開く」で別タブに表示します。
+        当日の予想キャッシュがあれば十数秒、無ければ2〜3分かかります。完了後「展開を開く」で別タブに表示します。
       </p>
+
+      <div class="admin-sim-mode">
+        <div class="admin-sim-row">
+          <div class="admin-sim-field">
+            <p class="admin-label">展開シミュレーションモード（直前予想と並行生成）</p>
+            <p class="admin-hint" id="raceSimModeHint">読み込み中…</p>
+          </div>
+          <button
+            type="button"
+            class="admin-btn admin-btn-action"
+            id="btnRaceSimMode"
+            aria-pressed="false"
+            disabled
+          >読み込み中</button>
+        </div>
+      </div>
       <div class="admin-form">
         <label class="admin-label" for="raceSimId">レースID（12桁）</label>
         <input
