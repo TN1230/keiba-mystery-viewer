@@ -37,6 +37,7 @@
   const btnRaceSimRun = document.getElementById("btnRaceSimRun");
   const btnRaceSimOpen = document.getElementById("btnRaceSimOpen");
   const btnRaceSimClose = document.getElementById("btnRaceSimClose");
+  const dataStatusList = document.getElementById("dataStatusList");
   const raceSimModeHint = document.getElementById("raceSimModeHint");
   const btnRaceSimMode = document.getElementById("btnRaceSimMode");
   const RACE_SIM_JOB_KEY = "kmv_admin_race_sim_job";
@@ -150,12 +151,14 @@
     loginPanel.hidden = true;
     menuPanel.hidden = false;
     if (logsPanel) logsPanel.hidden = true;
+    loadDataStatus();
   }
 
   function showLogsPanel() {
     loginPanel.hidden = true;
     menuPanel.hidden = false;
     if (logsPanel) logsPanel.hidden = false;
+    loadDataStatus();
   }
 
   function eventLabel(event) {
@@ -525,7 +528,7 @@
     setStatus(menuStatus, "");
   });
 
-  /* ---------- ⑤ 展開シミュレーション ---------- */
+  /* ---------- 展開シミュレーション ---------- */
 
   function stopRaceSimPoll() {
     if (raceSimPollTimer) {
@@ -662,6 +665,67 @@
     }
     setStatus(raceSimStatus, data.message || "生成中…");
     raceSimPollTimer = setTimeout(() => pollRaceSim(jobId), 5000);
+  }
+
+  function fmtStamp(iso) {
+    if (!iso) return "不明";
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (!m) return String(iso);
+    return `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}`;
+  }
+
+  function fmtSize(bytes) {
+    const n = Number(bytes) || 0;
+    if (n >= 1073741824) return `${(n / 1073741824).toFixed(2)}GB`;
+    if (n >= 1048576) return `${(n / 1048576).toFixed(1)}MB`;
+    if (n >= 1024) return `${(n / 1024).toFixed(0)}KB`;
+    return `${n}B`;
+  }
+
+  function dataStatusRow(term, detail, missing) {
+    const row = document.createElement("div");
+    row.className = "admin-data-status-row";
+    const dt = document.createElement("dt");
+    dt.textContent = term;
+    const dd = document.createElement("dd");
+    dd.textContent = detail;
+    if (missing) dd.classList.add("is-missing");
+    row.appendChild(dt);
+    row.appendChild(dd);
+    return row;
+  }
+
+  function renderDataStatus(items) {
+    if (!dataStatusList) return;
+    dataStatusList.textContent = "";
+    if (!Array.isArray(items) || !items.length) {
+      dataStatusList.appendChild(dataStatusRow("取得できませんでした", "", true));
+      return;
+    }
+    items.forEach((it) => {
+      if (!it.exists) {
+        dataStatusList.appendChild(dataStatusRow(it.label || it.file || "", "ファイルがありません", true));
+        return;
+      }
+      const bits = [fmtStamp(it.updated_at)];
+      if (it.age_days !== null && it.age_days !== undefined) {
+        bits.push(`${Math.floor(it.age_days)}日前`);
+      }
+      if (it.size_bytes) bits.push(fmtSize(it.size_bytes));
+      if (it.period_from && it.period_to) bits.push(`集計 ${it.period_from}〜${it.period_to}`);
+      dataStatusList.appendChild(dataStatusRow(it.label || it.file || "", bits.join(" / "), false));
+    });
+  }
+
+  async function loadDataStatus() {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const { data } = await api("/admin/data-status", { token, silent: true });
+      renderDataStatus(data && data.ok ? data.items : null);
+    } catch {
+      renderDataStatus(null);
+    }
   }
 
   function renderRaceSimMode(status) {

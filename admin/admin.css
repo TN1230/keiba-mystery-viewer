@@ -283,3 +283,45 @@ body.admin-body {
 .admin-sim-mode .admin-hint {
   margin: 0;
 }
+/* データ更新状況（メニューに常時表示） */
+.admin-data-status {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid rgba(11, 61, 46, 0.12);
+}
+
+.admin-data-status-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.admin-data-status-list {
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-data-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  align-items: baseline;
+}
+
+.admin-data-status-row dt {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.admin-data-status-row dd {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-data-status-row dd.is-missing {
+  color: #b3261e;
+}
