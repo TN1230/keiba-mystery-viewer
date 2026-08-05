@@ -37,6 +37,7 @@
   const btnRaceSimRun = document.getElementById("btnRaceSimRun");
   const btnRaceSimOpen = document.getElementById("btnRaceSimOpen");
   const btnRaceSimClose = document.getElementById("btnRaceSimClose");
+  const btnRaceSimReset = document.getElementById("btnRaceSimReset");
   const dataStatusList = document.getElementById("dataStatusList");
   const raceSimModeHint = document.getElementById("raceSimModeHint");
   const btnRaceSimMode = document.getElementById("btnRaceSimMode");
@@ -791,6 +792,38 @@
       } catch (e) {
         btnRaceSimMode.disabled = false;
         setStatus(raceSimStatus, e.message || String(e), "error");
+      }
+    });
+  }
+
+  if (btnRaceSimReset) {
+    btnRaceSimReset.addEventListener("click", async () => {
+      const token = getToken();
+      if (!token) {
+        await forceLogout("セッションがありません。再ログインしてください。");
+        return;
+      }
+      if (!window.confirm("生成済みの展開シミュレーションをすべて削除します。よろしいですか？")) {
+        return;
+      }
+      btnRaceSimReset.disabled = true;
+      stopRaceSimPoll();
+      try {
+        const { data } = await api("/admin/race-sim/reset", { method: "POST", token });
+        if (data && data.ok) {
+          // 消したファイルを指したままにならないよう、保持している job も捨てる
+          sessionStorage.removeItem(RACE_SIM_JOB_KEY);
+          sessionStorage.removeItem(RACE_SIM_RACE_KEY);
+          setRaceSimLog("");
+          syncRaceSimOpenButton();
+          setStatus(raceSimStatus, data.message || "生成物を削除しました。", "ok");
+        } else {
+          setStatus(raceSimStatus, (data && data.message) || "削除に失敗しました", "error");
+        }
+      } catch (e) {
+        setStatus(raceSimStatus, e.message || String(e), "error");
+      } finally {
+        btnRaceSimReset.disabled = false;
       }
     });
   }
