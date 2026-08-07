@@ -857,6 +857,37 @@
       "\n※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください";
   }
 
+  function formatMarkWeeklyLogic(logic) {
+    const label = String((logic && logic.label) || (logic && logic.id) || "").trim();
+    const lines = [label ? `・${label}` : "・"];
+    const marks = (logic && logic.marks) || [];
+    for (const item of marks) {
+      const mk = String((item && item.mark) || "");
+      const n = Number((item && item.n) || 0);
+      const fin = Array.isArray(item && item.finishes) ? item.finishes : [0, 0, 0, 0];
+      const a = Number(fin[0] || 0);
+      const b = Number(fin[1] || 0);
+      const c = Number(fin[2] || 0);
+      const d = Number(fin[3] || 0);
+      lines.push(`${mk}（${n}）【${a}-${b}-${c}-${d}】`);
+    }
+    return lines.join("\n");
+  }
+
+  function renderMarkWeeklyStats(data) {
+    const el = $("markWeeklyStats") || document.querySelector(".sidebar-mark-weekly-body");
+    if (!el) return;
+    const payload = data && data.mark_weekly_stats;
+    const emptyMsg =
+      (payload && typeof payload.empty_message === "string" && payload.empty_message.trim()) ||
+      "データがありません";
+    if (!payload || !payload.has_data || !Array.isArray(payload.logics) || !payload.logics.length) {
+      el.textContent = emptyMsg;
+      return;
+    }
+    el.textContent = payload.logics.map(formatMarkWeeklyLogic).join("\n");
+  }
+
   function applyData(data, { flash = false } = {}) {
     const prevUpdated = state.data && state.data.updated_at;
     state.data = data;
@@ -873,6 +904,7 @@
       window.setTimeout(() => el.classList.remove("just-updated"), 2500);
     }
     renderUpdateTiming(data);
+    renderMarkWeeklyStats(data);
     renderTop5();
     renderTabs();
     renderMatrix();
