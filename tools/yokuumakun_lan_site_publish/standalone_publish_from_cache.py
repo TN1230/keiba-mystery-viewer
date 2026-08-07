@@ -1361,6 +1361,17 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         "_skipped_races": skipped,
     }
     try:
+        import mark_weekly_stats
+
+        snap_out["mark_weekly_stats"] = mark_weekly_stats.load_sidebar_latest()
+    except Exception:
+        snap_out["mark_weekly_stats"] = {
+            "schema_version": 1,
+            "has_data": False,
+            "logics": [],
+            "empty_message": "データがありません",
+        }
+    try:
         from race_course_distance import enrich_snapshot_with_course_distance
 
         enrich_snapshot_with_course_distance(snap_out, races_cache)
