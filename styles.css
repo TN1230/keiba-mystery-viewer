@@ -226,9 +226,10 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   align-items: center;
   gap: 0.35rem;
   min-height: 0;
-  font-size: inherit;
-  font-weight: 700;
-  line-height: inherit;
+  /* update-timing と同じ実寸（太字だと大きく見えるので weight も揃える） */
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.5;
   color: var(--accent);
   user-select: none;
 }
@@ -405,6 +406,12 @@ body.is-day-closed .site-sidebar button:not([aria-disabled="true"]) {
   .site-sidebar .sidebar-mark-weekly,
   .site-sidebar .sidebar-dev-notes {
     font-size: 0.74rem;
+  }
+  .site-sidebar .sidebar-mark-weekly > summary,
+  .site-sidebar .sidebar-dev-notes > summary {
+    font-size: 0.74rem;
+    font-weight: 400;
+    line-height: 1.5;
   }
   .site-sidebar .nav-links {
     margin-top: 1.15rem;
