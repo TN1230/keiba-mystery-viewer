@@ -1366,9 +1366,10 @@ def build_snapshot(races_cache: dict[str, Any], day: str) -> dict[str, Any]:
         snap_out["mark_weekly_stats"] = mark_weekly_stats.load_sidebar_latest()
     except Exception:
         snap_out["mark_weekly_stats"] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "has_data": False,
             "logics": [],
+            "avg_popularity_note": "※平均人気：3着以内の馬の平均人気",
             "empty_message": "データがありません",
         }
     try:
