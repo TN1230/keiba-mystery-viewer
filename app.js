@@ -857,6 +857,15 @@
       "\n※更新されない場合は通信障害など運用上のトラブルが発生しております。ご容赦ください";
   }
 
+  function formatMarkWeeklyAvgPop(avg) {
+    if (avg == null || avg === "") return "";
+    const n = Number(avg);
+    if (!Number.isFinite(n)) return "";
+    const r = Math.round(n * 10) / 10;
+    if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
+    return r.toFixed(1);
+  }
+
   function formatMarkWeeklyLogic(logic) {
     const label = String((logic && logic.label) || (logic && logic.id) || "").trim();
     const lines = [label ? `・${label}` : "・"];
@@ -869,7 +878,10 @@
       const b = Number(fin[1] || 0);
       const c = Number(fin[2] || 0);
       const d = Number(fin[3] || 0);
-      lines.push(`${mk}（${n}）【${a}-${b}-${c}-${d}】`);
+      let line = `${mk}（${n}）【${a}-${b}-${c}-${d}】`;
+      const avgTxt = formatMarkWeeklyAvgPop(item && item.avg_popularity_top3);
+      if (avgTxt) line += `<${avgTxt}>`;
+      lines.push(line);
     }
     return lines.join("\n");
   }
@@ -885,7 +897,10 @@
       el.textContent = emptyMsg;
       return;
     }
-    el.textContent = payload.logics.map(formatMarkWeeklyLogic).join("\n");
+    const note =
+      (typeof payload.avg_popularity_note === "string" && payload.avg_popularity_note.trim()) ||
+      "※平均人気：3着以内の馬の平均人気";
+    el.textContent = [note, ...payload.logics.map(formatMarkWeeklyLogic)].join("\n");
   }
 
   function applyData(data, { flash = false } = {}) {
